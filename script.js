@@ -1,3 +1,6 @@
+// Verbindung zum neuen Render-Server
+const socket = io("https://mein-schach-vo91.onrender.com");
+
 const boardEl = document.getElementById("chess-board");
 const statusEl = document.getElementById("status-display");
 const chatMessages = document.getElementById("chat-messages");
@@ -22,7 +25,7 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- CHAT LOGIK ---
+// --- CHAT LOGIK (AKTUALISIERT) ---
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
@@ -35,11 +38,17 @@ function addChat(sender, text, type) {
 function sendMessage() {
     const text = chatInput.value.trim();
     if (text !== "") {
+        // Nachricht an den Server senden
+        socket.emit("chatMessage", text); 
         addChat("Du", text, "me");
         chatInput.value = "";
-        // Hier könnte die ws.send Logik stehen, falls Multiplayer aktiv ist
     }
 }
+
+// Empfang von Nachrichten vom Server
+socket.on("chatMessage", (data) => {
+    addChat("Gegner", data.text, "other");
+});
 
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
@@ -118,13 +127,16 @@ function hasLegalMoves(color) {
     return false;
 }
 
-function doMove(fr, fc, tr, tc) {
+function doMove(fr, fc, tr, tc, emit = true) {
     history.push({ board: JSON.parse(JSON.stringify(board)), turn });
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
+
+    // Zug an Server senden für Multiplayer
+    if(emit) socket.emit("move", {fr, fc, tr, tc});
 
     turn = (turn === "white" ? "black" : "white");
     
@@ -142,6 +154,11 @@ function doMove(fr, fc, tr, tc) {
     }
     draw();
 }
+
+// Gegner-Zug empfangen
+socket.on("move", (m) => {
+    doMove(m.fr, m.fc, m.tr, m.tc, false);
+});
 
 function draw() {
     boardEl.innerHTML = "";
