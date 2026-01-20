@@ -16,34 +16,64 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, myColor = "white";
 
-socket.onopen = () => socket.send(JSON.stringify({ type: 'join', room: 'global', name: 'Ich' }));
-socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'match_found') { myColor = data.color; resetGame(); alert("Gegner gefunden!"); }
-    if (data.type === 'global_chat') addChat(data.sender, data.text, "other");
-    if (data.type === 'move') doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
+// WebSocket Events
+socket.onopen = () => {
+    statusEl.textContent = "Verbunden. Viel Erfolg!";
+    socket.send(JSON.stringify({ type: 'join', room: 'global', name: 'Spieler' }));
 };
 
-function addChat(s, t, type) {
-    const m = document.createElement("div"); m.innerHTML = `<strong>${s}:</strong> ${t}`;
-    chatMessages.appendChild(m); chatMessages.scrollTop = chatMessages.scrollHeight;
+socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'match_found') {
+        myColor = data.color;
+        alert("Spiel gestartet! Du bist " + (myColor === 'white' ? "Weiß" : "Schwarz"));
+        resetGame();
+    }
+    if (data.type === 'global_chat') {
+        addChat(data.sender, data.text);
+    }
+    if (data.type === 'move') {
+        executeMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
+    }
+};
+
+function addChat(sender, text) {
+    const msg = document.createElement("div");
+    msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function sendMessage() {
-    const t = chatInput.value.trim();
-    if (t) { socket.send(JSON.stringify({ type: 'global_chat', sender: 'Ich', text: t })); addChat("Du", t, "me"); chatInput.value = ""; }
+    const text = chatInput.value.trim();
+    if (text && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'global_chat', sender: 'Ich', text: text }));
+        addChat("Du", text);
+        chatInput.value = "";
+    }
 }
 sendBtn.onclick = sendMessage;
 
-function findOpponent() { socket.send(JSON.stringify({ type: 'find_random' })); statusEl.textContent = "Suche Gegner..."; }
-
-function resetGame() {
-    board = [ ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"], ["","","","","","","",""], ["","","","","","","",""], ["","","","","","","",""], ["","","","","","","",""], ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"] ];
-    turn = "white"; draw();
+function findOpponent() {
+    socket.send(JSON.stringify({ type: 'find_random' }));
+    statusEl.textContent = "Suche Gegner...";
 }
 
-function doMove(fr, fc, tr, tc, emit = true) {
-    board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
+// Schach Logik
+function resetGame() {
+    board = [
+        ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
+        ["","","","","","","",""], ["","","","","","","",""],
+        ["","","","","","","",""], ["","","","","","","",""],
+        ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
+    ];
+    turn = "white";
+    draw();
+}
+
+function executeMove(fr, fc, tr, tc, emit) {
+    board[tr][tc] = board[fr][fc];
+    board[fr][fc] = "";
     if (emit) socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     turn = turn === "white" ? "black" : "white";
     draw();
@@ -54,14 +84,23 @@ function draw() {
     board.forEach((row, r) => row.forEach((p, c) => {
         const d = document.createElement("div");
         d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
-        if (p) { const img = document.createElement("img"); img.src = PIECE_URLS[p]; img.style.width = "50px"; d.appendChild(img); }
+        if (selected && selected.r === r && selected.c === c) d.classList.add("selected");
+        if (p) {
+            const img = document.createElement("img");
+            img.src = PIECE_URLS[p];
+            d.appendChild(img);
+        }
         d.onclick = () => {
-            if (selected) { doMove(selected.r, selected.c, r, c); selected = null; }
-            else if (p) selected = {r, c};
+            if (selected) {
+                executeMove(selected.r, selected.c, r, c, true);
+                selected = null;
+            } else if (p) {
+                selected = {r, c};
+            }
             draw();
         };
         boardEl.appendChild(d);
     }));
-    statusEl.textContent = turn === "white" ? "Weiß am Zug" : "Schwarz am Zug";
+    statusEl.textContent = turn === "white" ? "Weiß ist am Zug" : "Schwarz ist am Zug";
 }
 resetGame();
