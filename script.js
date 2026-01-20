@@ -1,5 +1,5 @@
-// Verbindung zum neuen Render-Server
-const socket = io("https://mein-schach-vo91.onrender.com");
+// 1. Verbindung zum WebSocket-Server auf Render
+const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
 const boardEl = document.getElementById("chess-board");
 const statusEl = document.getElementById("status-display");
@@ -25,7 +25,29 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- CHAT LOGIK (AKTUALISIERT) ---
+// --- WEBSOCKET EMPFANGS-LOGIK ---
+socket.onopen = () => {
+    console.log("Verbunden mit dem Schach-Server!");
+    // Beitritts-Nachricht an den Server senden
+    socket.send(JSON.stringify({ type: 'join', room: 'global', name: 'Spieler' }));
+};
+
+socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    // Globalen Chat empfangen
+    if (data.type === 'global_chat' || data.type === 'chat') {
+        addChat(data.sender || "Unbekannt", data.text, "other");
+    }
+
+    // Züge vom Gegner empfangen
+    if (data.type === 'move') {
+        const m = data.move;
+        doMove(m.fr, m.fc, m.tr, m.tc, false);
+    }
+};
+
+// --- CHAT LOGIK ---
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
@@ -37,18 +59,18 @@ function addChat(sender, text, type) {
 
 function sendMessage() {
     const text = chatInput.value.trim();
-    if (text !== "") {
-        // Nachricht an den Server senden
-        socket.emit("chatMessage", text); 
+    if (text !== "" && socket.readyState === WebSocket.OPEN) {
+        // Nachricht an den Server senden (für alle sichtbar)
+        socket.send(JSON.stringify({
+            type: 'global_chat',
+            sender: 'Ich',
+            text: text
+        }));
+        
         addChat("Du", text, "me");
         chatInput.value = "";
     }
 }
-
-// Empfang von Nachrichten vom Server
-socket.on("chatMessage", (data) => {
-    addChat("Gegner", data.text, "other");
-});
 
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
@@ -135,8 +157,13 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    // Zug an Server senden für Multiplayer
-    if(emit) socket.emit("move", {fr, fc, tr, tc});
+    // Züge an Server senden
+    if(emit && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'move',
+            move: {fr, fc, tr, tc}
+        }));
+    }
 
     turn = (turn === "white" ? "black" : "white");
     
@@ -154,11 +181,6 @@ function doMove(fr, fc, tr, tc, emit = true) {
     }
     draw();
 }
-
-// Gegner-Zug empfangen
-socket.on("move", (m) => {
-    doMove(m.fr, m.fc, m.tr, m.tc, false);
-});
 
 function draw() {
     boardEl.innerHTML = "";
