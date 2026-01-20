@@ -2,48 +2,54 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schach Pro - Live Multiplayer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="game-container">
-    <div class="board-section">
-        <div id="status-display">Weiß am Zug</div>
-        <div id="chess-board"></div>
-    </div>
-
-    <div class="sidebar">
-        <div class="controls">
-            <select id="gameMode">
-                <option value="online">Online Multiplayer</option>
-                <option value="random">Zufälliger Gegner</option>
-                <option value="pvp">Lokal (2 Spieler)</option>
-            </select>
-            <input type="text" id="roomID" placeholder="Raum-ID">
-            <button id="connectMP">Mit Server Verbinden</button>
-            <div class="btn-row">
-                <button id="undoBtn">Undo</button>
-                <button id="resetBtn">Reset</button>
-            </div>
+    <div class="game-container">
+        <div class="board-section">
+            <div id="status-display">Weiß am Zug</div>
+            <div id="chess-board"></div>
         </div>
 
-        <div id="chat-container">
-            <div class="chat-header">
-                <span>💬 Live Chat</span>
-                <span id="user-counter" class="online-tag">Online: 0</span>
+        <div class="sidebar">
+            <div class="controls">
+                <select id="gameMode">
+                    <option value="online">Online Multiplayer</option>
+                    <option value="random">Zufälliger Gegner</option>
+                    <option value="pvp">Lokal (2 Spieler)</option>
+                    <option value="bot">Gegen Bot (Smart)</option>
+                    <option value="global_chat">Welt-Chat (Global)</option>
+                </select>
+                
+                <input type="text" id="roomID" placeholder="Raum-ID für Multiplayer">
+                <button id="connectMP">Mit Server Verbinden</button>
+                
+                <div class="btn-row">
+                    <button id="undoBtn" style="background: #e67e22; flex: 1;">Undo</button>
+                    <button id="resetBtn" style="background: #e74c3c; flex: 1;">Reset</button>
+                </div>
             </div>
-            <div id="chat-messages"></div>
-            <div class="emoji-bar">
-                <span>😊</span><span>😂</span><span>🔥</span><span>👍</span><span>♟️</span>
+
+            <div id="chat-container">
+                <div class="chat-header">
+                    <span>💬 Live Chat</span>
+                    <span id="user-counter">Online: 0</span>
+                </div>
+                <div id="chat-messages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Nachricht schreiben...">
+                    <button id="send-chat">Sende</button>
+                </div>
             </div>
-            <div class="chat-input-area">
-                <input type="text" id="chat-input" placeholder="Nachricht...">
-                <button id="send-chat">Sende</button>
+
+            <div class="leaderboard">
+                <span class="leaderboard-title">🏆 Top Spieler:</span>
+                <div id="leaderboard-list" style="color: #ccc;">Lade Daten...</div>
             </div>
         </div>
-        <div class="leaderboard">🏆 Top Spieler:</div>
     </div>
-</div>
-<script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
