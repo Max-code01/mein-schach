@@ -1,4 +1,4 @@
-// 1. Verbindung zum WebSocket-Server auf Render
+// 1. Verbindung zum neuen WebSocket-Server auf Render
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
 const boardEl = document.getElementById("chess-board");
@@ -17,37 +17,45 @@ function playSnd(s) { s.play().catch(() => {}); }
 const PIECE_URLS = {
     'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', 'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
     'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg', 'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
-    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', 'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qdt45.svg', 'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
     'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', 'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
     'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', 'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
     'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', 'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg'
 };
 
 let board, turn = "white", selected = null, history = [];
+let myColor = "white"; // Standardmäßig weiß, wird bei Match-Suche angepasst
 
-// --- WEBSOCKET EMPFANGS-LOGIK ---
+// --- NEUE WEBSOCKET LOGIK ---
 socket.onopen = () => {
-    console.log("Verbunden mit dem Schach-Server!");
-    // Beitritts-Nachricht an den Server senden
+    console.log("Verbunden mit dem Server!");
+    // Beitritt zum globalen Raum für den Chat
     socket.send(JSON.stringify({ type: 'join', room: 'global', name: 'Spieler' }));
 };
 
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
-    // Globalen Chat empfangen
-    if (data.type === 'global_chat' || data.type === 'chat') {
-        addChat(data.sender || "Unbekannt", data.text, "other");
+    // Wenn ein Gegner gefunden wurde
+    if (data.type === 'match_found') {
+        alert("Gegner gefunden! Du spielst: " + (data.color === 'white' ? "Weiß" : "Schwarz"));
+        myColor = data.color;
+        resetGame();
     }
 
-    // Züge vom Gegner empfangen
+    // Wenn eine Chat-Nachricht ankommt
+    if (data.type === 'global_chat' || data.type === 'chat') {
+        addChat(data.sender || "Gegner", data.text, "other");
+    }
+
+    // Wenn der Gegner einen Zug macht
     if (data.type === 'move') {
         const m = data.move;
-        doMove(m.fr, m.fc, m.tr, m.tc, false);
+        doMove(m.fr, m.fc, m.tr, m.tc, false); // false = nicht nochmal senden
     }
 };
 
-// --- CHAT LOGIK ---
+// Hilfsfunktion für den Chat-Verlauf
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
@@ -60,22 +68,29 @@ function addChat(sender, text, type) {
 function sendMessage() {
     const text = chatInput.value.trim();
     if (text !== "" && socket.readyState === WebSocket.OPEN) {
-        // Nachricht an den Server senden (für alle sichtbar)
+        // Senden an den Server (für alle im Welt-Chat)
         socket.send(JSON.stringify({
             type: 'global_chat',
             sender: 'Ich',
             text: text
         }));
-        
         addChat("Du", text, "me");
         chatInput.value = "";
     }
 }
 
-sendBtn.onclick = sendMessage;
-chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
+if(sendBtn) sendBtn.onclick = sendMessage;
+if(chatInput) chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
-// --- SCHACH LOGIK ---
+// Funktion um die Gegnersuche zu starten
+function findOpponent() {
+    if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'find_random', name: 'Spieler' }));
+        statusEl.textContent = "Suche Gegner...";
+    }
+}
+
+// --- DEINE BEWÄHRTE SCHACH LOGIK ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
@@ -92,7 +107,9 @@ function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase()
 
 function canMoveLogic(fr, fc, tr, tc, b = board) {
     const p = b[fr][fc]; if(!p) return false;
-    const target = b[tr][tc]; if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
+    const target = b[tr][tc]; 
+    if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
+    
     const dr = Math.abs(tr - fr), dc = Math.abs(tc - fc), type = p.toLowerCase();
 
     if(type === 'p') {
@@ -131,19 +148,22 @@ function isAttacked(tr, tc, attackerColor, b = board) {
 
 function canMove(fr, fc, tr, tc) {
     if(!canMoveLogic(fr, fc, tr, tc)) return false;
-    const p = board[fr][fc], t = board[tr][tc];
-    board[tr][tc] = p; board[fr][fc] = "";
-    const color = isOwn(p, "white") ? "white" : "black";
+    const piece = board[fr][fc];
+    const target = board[tr][tc];
+    board[tr][tc] = piece; board[fr][fc] = "";
+    const color = isOwn(piece, "white") ? "white" : "black";
     const k = findKing(color);
-    const safe = !isAttacked(k.r, k.c, color === "white" ? "black" : "white");
-    board[fr][fc] = p; board[tr][tc] = t;
-    return safe;
+    const inCheckAfter = isAttacked(k.r, k.c, color === "white" ? "black" : "white");
+    board[fr][fc] = piece; board[tr][tc] = target;
+    return !inCheckAfter;
 }
 
-function hasLegalMoves(color) {
+function hasAnyLegalMove(color) {
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
         if(board[r][c] && isOwn(board[r][c], color)) {
-            for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) if(canMove(r, c, tr, tc)) return true;
+            for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) {
+                if(canMove(r, c, tr, tc)) return true;
+            }
         }
     }
     return false;
@@ -151,14 +171,14 @@ function hasLegalMoves(color) {
 
 function doMove(fr, fc, tr, tc, emit = true) {
     history.push({ board: JSON.parse(JSON.stringify(board)), turn });
-    const isCap = board[tr][tc] !== "";
+    const isCapture = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    // Züge an Server senden
-    if(emit && socket.readyState === WebSocket.OPEN) {
+    // NEU: Sende den Zug an den Gegner über den Server
+    if (emit && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
             type: 'move',
             move: {fr, fc, tr, tc}
@@ -166,20 +186,29 @@ function doMove(fr, fc, tr, tc, emit = true) {
     }
 
     turn = (turn === "white" ? "black" : "white");
-    
+    draw();
+
     const k = findKing(turn);
     const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
-    const moves = hasLegalMoves(turn);
+    const movesLeft = hasAnyLegalMove(turn);
 
     if (inCheck) {
-        if (!moves) { statusEl.textContent = "SCHACHMATT!"; statusEl.style.color = "red"; }
-        else { statusEl.textContent = "SCHACH!"; }
-        playSnd(checkSound);
+        if (!movesLeft) {
+            statusEl.textContent = "SCHACHMATT! " + (turn === "white" ? "Schwarz" : "Weiß") + " gewinnt!";
+            statusEl.style.color = "#ff4d4d";
+            playSnd(checkSound);
+        } else {
+            statusEl.textContent = "SCHACH!";
+            playSnd(checkSound);
+        }
     } else {
-        if (!moves) statusEl.textContent = "PATT!";
-        else { statusEl.style.color = "white"; isCap ? playSnd(captureSound) : playSnd(moveSound); }
+        if (!movesLeft) {
+            statusEl.textContent = "PATT (Remis)!";
+        } else {
+            statusEl.style.color = "white";
+            isCapture ? playSnd(captureSound) : playSnd(moveSound);
+        }
     }
-    draw();
 }
 
 function draw() {
@@ -193,11 +222,13 @@ function draw() {
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
             if(check && k.r === r && k.c === c) d.style.backgroundColor = "rgba(255, 0, 0, 0.6)";
+            
             if(p) {
                 const img = document.createElement("img"); img.src = PIECE_URLS[p];
                 img.style.width = "85%"; d.appendChild(img);
             }
             d.onclick = () => {
+                // Man kann nur ziehen, wenn man dran ist (turn === myColor)
                 if(selected) {
                     if(canMove(selected.r, selected.c, r, c)) { doMove(selected.r, selected.c, r, c); selected = null; }
                     else { selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null; }
@@ -207,15 +238,17 @@ function draw() {
             boardEl.appendChild(d);
         });
     });
-    if(!statusEl.textContent.includes("MATT") && !statusEl.textContent.includes("SCHACH")) {
+    if(!statusEl.textContent.includes("MATT") && !statusEl.textContent.includes("PATT") && !statusEl.textContent.includes("SCHACH!")) {
         statusEl.textContent = (turn === "white" ? "Weiß am Zug" : "Schwarz am Zug");
     }
 }
 
 document.getElementById("undoBtn").onclick = () => {
     if(history.length > 0) { 
-        const last = history.pop(); board = last.board; turn = last.turn; 
-        selected = null; statusEl.style.color = "white"; draw(); 
+        const last = history.pop(); 
+        board = last.board; turn = last.turn; 
+        selected = null; statusEl.style.color = "white"; 
+        draw(); 
     }
 };
 document.getElementById("resetBtn").onclick = resetGame;
