@@ -2,55 +2,44 @@ const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: process.env.PORT || 8080 });
 
 let users = new Set();
-let randomQueue = null;
-let leaderboard = {}; // Speichert Siege
-
-function broadcastUserCount() {
-    const count = users.size;
-    users.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'user_count', count }));
-        }
-    });
-}
+let randomQueue = null; 
+let leaderboard = {};
 
 wss.on('connection', (ws) => {
     users.add(ws);
-    ws.room = "global"; 
+    ws.room = "global";
     broadcastUserCount();
 
     ws.on('message', (message) => {
         const data = JSON.parse(message);
 
-        // 1. BEITRETEN (Privat oder Global)
         if (data.type === 'join') {
             ws.room = data.room || "global";
             ws.playerName = data.name || "Gast";
-            console.log(`${ws.playerName} ist Raum ${ws.room} beigetreten`);
         }
 
-        // 2. ZUFÄLLIGER GEGNER
         if (data.type === 'find_random') {
             ws.playerName = data.name || "Gast";
             if (randomQueue && randomQueue !== ws && randomQueue.readyState === WebSocket.OPEN) {
                 const partner = randomQueue;
                 randomQueue = null;
-                const roomID = "random_" + Math.random().toString(36).substr(2, 9);
-                
+                const roomID = "match_" + Math.random().toString(36).substr(2, 9);
                 ws.room = roomID;
                 partner.room = roomID;
-                
-                ws.send(JSON.stringify({ type: 'match_found', color: 'white', room: roomID }));
-                partner.send(JSON.stringify({ type: 'match_found', color: 'black', room: roomID }));
+                ws.send(JSON.stringify({ type: 'match_found', color: 'black', room: roomID }));
+                partner.send(JSON.stringify({ type: 'match_found', color: 'white', room: roomID }));
             } else {
                 randomQueue = ws;
             }
         }
 
-        // 3. WEITERLEITUNG (Züge & Chat)
+        // Broadcast Logik für Chat und Züge
+        const msgString = JSON.stringify(data);
         users.forEach(client => {
-            if (client !== ws && client.room === ws.room && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(data));
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                if (data.type === 'global_chat' || (client.room === ws.room)) {
+                    client.send(msgString);
+                }
             }
         });
     });
@@ -62,4 +51,7 @@ wss.on('connection', (ws) => {
     });
 });
 
-console.log("Schach-Server mit allen Funktionen bereit!");
+function broadcastUserCount() {
+    const msg = JSON.stringify({ type: 'user-count', count: users.size });
+    users.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+}
