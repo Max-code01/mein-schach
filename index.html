@@ -2,22 +2,23 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Schach</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro-Multiplayer Schach</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container">
-        <h2 id="status-display">Lade Spiel...</h2>
+        <h2 id="status-display">Verbinde zum Server...</h2>
         <div id="chess-board"></div>
         <div class="controls">
             <button id="undoBtn">Zurück</button>
             <button id="resetBtn">Neu starten</button>
-            <button onclick="findOpponent()" id="findBtn">Gegner suchen</button>
+            <button onclick="findOpponent()">Gegner suchen</button>
         </div>
         <div id="chat-box">
             <div id="chat-messages"></div>
             <div class="chat-input-area">
-                <input type="text" id="chat-input" placeholder="Nachricht...">
+                <input type="text" id="chat-input" placeholder="Nachricht an alle...">
                 <button id="send-chat">Senden</button>
             </div>
         </div>
