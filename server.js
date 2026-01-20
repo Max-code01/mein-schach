@@ -2,20 +2,22 @@ const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: process.env.PORT || 8080 });
 
 let users = new Set();
-let randomQueue = null; 
+let randomQueue = null;
 
 wss.on('connection', (ws) => {
     users.add(ws);
-    ws.room = "global"; 
-    
+    ws.room = "global";
+
     ws.on('message', (message) => {
         const data = JSON.parse(message);
 
+        // Beitritt
         if (data.type === 'join') {
             ws.room = data.room || "global";
             ws.playerName = data.name || "Gast";
         }
 
+        // Zufälligen Gegner finden
         if (data.type === 'find_random') {
             if (randomQueue && randomQueue !== ws && randomQueue.readyState === WebSocket.OPEN) {
                 const partner = randomQueue;
@@ -30,6 +32,7 @@ wss.on('connection', (ws) => {
             }
         }
 
+        // Globaler Chat für alle
         if (data.type === 'global_chat') {
             const msg = JSON.stringify({ type: 'global_chat', sender: data.sender, text: data.text });
             users.forEach(client => {
@@ -37,11 +40,12 @@ wss.on('connection', (ws) => {
             });
         }
 
+        // Züge nur an den Partner im selben Raum
         if (data.type === 'move') {
-            const msg = JSON.stringify({ type: 'move', move: data.move });
+            const msgString = JSON.stringify({ type: 'move', move: data.move });
             users.forEach(client => {
                 if (client !== ws && client.room === ws.room && client.readyState === WebSocket.OPEN) {
-                    client.send(msg);
+                    client.send(msgString);
                 }
             });
         }
@@ -52,4 +56,4 @@ wss.on('connection', (ws) => {
         if (randomQueue === ws) randomQueue = null;
     });
 });
-console.log("Schach-Server bereit!");
+console.log("Schach-Server mit allen Funktionen bereit!");
