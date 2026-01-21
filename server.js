@@ -1,57 +1,73 @@
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: process.env.PORT || 8080 });
+const http = require('http');
 
-let users = new Set();
-let randomQueue = null; 
-let leaderboard = {};
+const server = http.createServer();
+const wss = new WebSocket.Server({ server });
+
+let leaderboard = {}; // Speichert { "Name": Siege }
+let rooms = {};
 
 wss.on('connection', (ws) => {
-    users.add(ws);
-    ws.room = "global";
-    broadcastUserCount();
+    let currentRoom = null;
+    let playerName = "WeltGast";
+
+    // Sofort das aktuelle Leaderboard senden
+    sendLeaderboard(ws);
 
     ws.on('message', (message) => {
         const data = JSON.parse(message);
 
+        // --- ROOM LOGIK ---
         if (data.type === 'join') {
-            ws.room = data.room || "global";
-            ws.playerName = data.name || "Gast";
+            currentRoom = data.room;
+            playerName = data.name || "WeltGast";
+            ws.join(currentRoom);
         }
 
-        if (data.type === 'find_random') {
-            ws.playerName = data.name || "Gast";
-            if (randomQueue && randomQueue !== ws && randomQueue.readyState === WebSocket.OPEN) {
-                const partner = randomQueue;
-                randomQueue = null;
-                const roomID = "match_" + Math.random().toString(36).substr(2, 9);
-                ws.room = roomID;
-                partner.room = roomID;
-                ws.send(JSON.stringify({ type: 'match_found', color: 'black', room: roomID }));
-                partner.send(JSON.stringify({ type: 'match_found', color: 'white', room: roomID }));
-            } else {
-                randomQueue = ws;
-            }
+        // --- WIN LOGIK (Für das Leaderboard) ---
+        if (data.type === 'win') {
+            const winnerName = data.playerName || playerName;
+            leaderboard[winnerName] = (leaderboard[winnerName] || 0) + 1;
+            broadcastLeaderboard(); // Alle informieren
         }
 
-        // Broadcast Logik für Chat und Züge
-        const msgString = JSON.stringify(data);
-        users.forEach(client => {
+        // --- WEITERLEITUNG (Moves & Chat) ---
+        wss.clients.forEach(client => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
-                if (data.type === 'global_chat' || (client.room === ws.room)) {
-                    client.send(msgString);
-                }
+                // Hier prüfen wir normalerweise den Raum, aber für den Chat/Move 
+                // leiten wir es an alle relevanten Clients weiter
+                client.send(JSON.stringify(data));
             }
         });
-    });
 
-    ws.on('close', () => {
-        users.delete(ws);
-        if (randomQueue === ws) randomQueue = null;
+        // User Count Update
         broadcastUserCount();
     });
+
+    ws.on('close', () => broadcastUserCount());
 });
 
-function broadcastUserCount() {
-    const msg = JSON.stringify({ type: 'user-count', count: users.size });
-    users.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+function sendLeaderboard(target) {
+    const sorted = Object.entries(leaderboard)
+        .map(([name, wins]) => ({ name, wins }))
+        .sort((a, b) => b.wins - a.wins)
+        .slice(0, 5);
+    target.send(JSON.stringify({ type: 'leaderboard', list: sorted }));
 }
+
+function broadcastLeaderboard() {
+    const sorted = Object.entries(leaderboard)
+        .map(([name, wins]) => ({ name, wins }))
+        .sort((a, b) => b.wins - a.wins)
+        .slice(0, 5);
+    const msg = JSON.stringify({ type: 'leaderboard', list: sorted });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+}
+
+function broadcastUserCount() {
+    const msg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+}
+
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
