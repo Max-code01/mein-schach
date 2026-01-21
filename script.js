@@ -4,17 +4,9 @@ const chatMessages = document.getElementById("chat-messages");
 const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-chat");
 const gameModeSelect = document.getElementById("gameMode");
-const nameInput = document.getElementById("playerName");
+const leaderboardList = document.getElementById("leaderboard-list");
 
-// --- 1. INITIALISIERUNG & SPEICHERUNG ---
-if (localStorage.getItem("chessPlayerName")) {
-    nameInput.value = localStorage.getItem("chessPlayerName");
-}
-nameInput.oninput = () => {
-    localStorage.setItem("chessPlayerName", nameInput.value);
-};
-
-// --- 2. VERBINDUNGEN ---
+// --- VERBINDUNGEN ---
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 let stockfishWorker = new Worker('engineWorker.js'); 
 
@@ -29,7 +21,7 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- 3. BOT LOGIK ---
+// --- BOT LOGIK ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
@@ -43,36 +35,48 @@ function triggerBot() {
     }
 }
 
-// --- 4. SERVER & CHAT LOGIK ---
+// --- SERVER & CHAT LOGIK ---
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    if (data.type === 'move' && gameModeSelect.value !== "bot") {
+    
+    if (data.type === 'move' && gameModeSelect.value === "online") {
         doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
     }
+    
     if (data.type === 'chat' || data.type === 'global_chat') {
         addChat(data.sender || "Gegner", data.text, "other");
     }
+    
     if (data.type === 'user-count') {
         document.getElementById("user-counter").textContent = "Online: " + data.count;
+    }
+
+    if (data.type === 'leaderboard') {
+        updateLeaderboard(data.list);
     }
 };
 
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
-    // "system" Typ für graue Nachrichten nutzen
-    m.className = `msg ${type === 'me' ? 'my-msg' : (type === 'system' ? 'system-msg' : 'other-msg')}`;
-    m.innerHTML = type === 'system' ? `<i>${text}</i>` : `<strong>${sender}:</strong> ${text}`;
+    m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
+    m.innerHTML = `<strong>${sender}:</strong> ${text}`;
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+function updateLeaderboard(list) {
+    if (!leaderboardList) return;
+    leaderboardList.innerHTML = list.map((player, i) => 
+        `<div>${i+1}. ${player.name} (${player.wins} Siege)</div>`
+    ).join('');
+}
+
 function sendMessage() {
     const text = chatInput.value.trim();
-    const myName = nameInput.value.trim() || "Gast";
     if (text !== "" && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'chat', text: text, sender: myName }));
-        addChat(myName, text, "me");
+        socket.send(JSON.stringify({ type: 'chat', text: text, sender: 'WeltGast' }));
+        addChat("Du", text, "me");
         chatInput.value = "";
     }
 }
@@ -82,21 +86,16 @@ chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
 document.getElementById("connectMP").onclick = () => {
     const room = document.getElementById("roomID").value || "global";
-    const myName = nameInput.value.trim() || "Gast";
-    
     if(socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'join', room: room, name: myName }));
+        socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
         
         // --- SYSTEMNACHRICHTEN AKTIVIERT ---
-        addChat("System", `Du bist jetzt im Raum: ${room}`, "system");
-        addChat("System", `Suche nach Gegner...`, "system");
-        statusEl.textContent = "Verbunden. Warte auf Zug...";
-    } else {
-        addChat("System", "Verbindung zum Server fehlgeschlagen.", "system");
+        addChat("System", "Du bist jetzt im Raum: " + room, "other");
+        addChat("System", "Suche Gegner...", "other");
     }
 };
 
-// --- 5. SCHACH LOGIK ---
+// --- SCHACH LOGIK ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
@@ -115,6 +114,7 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
     const p = b[fr][fc]; if(!p) return false;
     const target = b[tr][tc]; if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
     const dr = Math.abs(tr - fr), dc = Math.abs(tc - fc), type = p.toLowerCase();
+    
     if(type === 'p') {
         const dir = (p === 'P') ? -1 : 1;
         if(fc === tc && b[tr][tc] === "") {
@@ -129,12 +129,9 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
         while(r !== tr || c !== tc) { if(b[r][c] !== "") return false; r += rD; c += cD; }
         return true;
     };
-    if(type === 'r' || type === 'b' || type === 'q') {
-        if(type === 'r' && (fr === tr || fc === tc)) return pathClear();
-        if(type === 'b' && dr === dc) return pathClear();
-        if(type === 'q' && (fr === tr || fc === tc || dr === dc)) return pathClear();
-        return false;
-    }
+    if(type === 'r' && (fr === tr || fc === tc)) return pathClear();
+    if(type === 'b' && dr === dc) return pathClear();
+    if(type === 'q' && (fr === tr || fc === tc || dr === dc)) return pathClear();
     if(type === 'n') return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
     if(type === 'k') return dr <= 1 && dc <= 1;
     return false;
@@ -178,7 +175,7 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    if (emit && gameModeSelect.value !== "bot" && socket.readyState === WebSocket.OPEN) {
+    if (emit && gameModeSelect.value === "online" && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     }
 
