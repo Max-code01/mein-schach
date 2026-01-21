@@ -5,8 +5,11 @@ const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-chat");
 const gameModeSelect = document.getElementById("gameMode");
 
-// --- NEU: Bot-Verbindung ---
-// Diese Zeile lädt deine engineWorker.js Datei
+// --- 1. VERBINDUNGEN (Das hat in deinem Code gefehlt) ---
+// Verbindung zum Online-Server
+const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
+
+// Verbindung zur KI (engineWorker.js)
 let stockfishWorker = new Worker('engineWorker.js');
 
 // Sounds
@@ -27,18 +30,34 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- NEU: Wenn der Bot einen Zug berechnet hat ---
+// --- 2. BOT LOGIK (Antwort verarbeiten) ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
-        // Kurze Pause, damit es natürlicher wirkt
         setTimeout(() => {
-            doMove(move.fr, move.fc, move.tr, move.tc);
+            doMove(move.fr, move.fc, move.tr, move.tc, false);
         }, 600);
     }
 };
 
-// --- CHAT LOGIK (Unverändert) ---
+function triggerBot() {
+    // Prüfen, ob "Gegen Bot" im Menü ausgewählt ist
+    if (gameModeSelect && gameModeSelect.value === "bot" && turn === "black") {
+        stockfishWorker.postMessage({ board: board, turn: "black" });
+    }
+}
+
+// --- 3. SERVER & CHAT LOGIK ---
+socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'move' && gameModeSelect.value !== "bot") {
+        doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
+    }
+    if (data.type === 'chat' || data.type === 'global_chat') {
+        addChat(data.sender || "Gegner", data.text, "other");
+    }
+};
+
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
@@ -50,7 +69,8 @@ function addChat(sender, text, type) {
 
 function sendMessage() {
     const text = chatInput.value.trim();
-    if (text !== "") {
+    if (text !== "" && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'chat', text: text }));
         addChat("Du", text, "me");
         chatInput.value = "";
     }
@@ -59,7 +79,13 @@ function sendMessage() {
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
-// --- SCHACH LOGIK ---
+document.getElementById("connectMP").onclick = () => {
+    const room = document.getElementById("roomID").value || "global";
+    socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
+    addChat("System", "Raum " + room + " beigetreten", "other");
+};
+
+// --- 4. SCHACH LOGIK (Optimiert) ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
@@ -133,13 +159,18 @@ function hasLegalMoves(color) {
     return false;
 }
 
-function doMove(fr, fc, tr, tc) {
+function doMove(fr, fc, tr, tc, emit = true) {
     history.push({ board: JSON.parse(JSON.stringify(board)), turn });
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
+
+    // Nur senden, wenn wir NICHT gegen den Bot spielen
+    if (emit && gameModeSelect.value !== "bot" && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
+    }
 
     turn = (turn === "white" ? "black" : "white");
     
@@ -158,10 +189,8 @@ function doMove(fr, fc, tr, tc) {
     
     draw();
 
-    // --- NEU: Bot anstoßen, wenn er dran ist ---
-    if (gameModeSelect.value === "bot" && turn === "black") {
-        stockfishWorker.postMessage({ board: board, turn: "black" });
-    }
+    // Bot anstoßen
+    if (turn === "black") triggerBot();
 }
 
 function draw() {
