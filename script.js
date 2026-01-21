@@ -6,7 +6,7 @@ const sendBtn = document.getElementById("send-chat");
 const gameModeSelect = document.getElementById("gameMode");
 const leaderboardList = document.getElementById("leaderboard-list");
 
-// --- VERBINDUNGEN ---
+// --- 1. VERBINDUNGEN ---
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 let stockfishWorker = new Worker('engineWorker.js'); 
 
@@ -21,7 +21,7 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- BOT LOGIK ---
+// --- 2. BOT LOGIK ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
@@ -35,32 +35,46 @@ function triggerBot() {
     }
 }
 
-// --- SERVER & CHAT LOGIK ---
+// --- 3. SERVER & CHAT LOGIK ---
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
     
+    // Züge empfangen (nur im Online-Modus)
     if (data.type === 'move' && gameModeSelect.value === "online") {
         doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
     }
     
+    // Chat Nachrichten (Normal & Global)
     if (data.type === 'chat' || data.type === 'global_chat') {
         addChat(data.sender || "Gegner", data.text, "other");
     }
     
+    // Spieler-Anzahl Update
     if (data.type === 'user-count') {
         document.getElementById("user-counter").textContent = "Online: " + data.count;
     }
 
+    // Leaderboard Daten
     if (data.type === 'leaderboard') {
         updateLeaderboard(data.list);
     }
 };
 
+// --- HIER SIND DIE SYSTEM-NACHRICHTEN ---
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
-    m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
-    m.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    
+    // Wenn der Sender "System" ist, stylen wir es anders (kursiv/grau)
+    if (sender === "System") {
+        m.className = "msg other-msg";
+        m.style.color = "#aaa"; // Grau für System
+        m.innerHTML = `<i><strong>${sender}:</strong> ${text}</i>`;
+    } else {
+        m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
+        m.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    }
+    
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -84,18 +98,25 @@ function sendMessage() {
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
+// --- VERBINDUNGSMELDUNGEN ---
 document.getElementById("connectMP").onclick = () => {
     const room = document.getElementById("roomID").value || "global";
+    
     if(socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
         
-        // --- SYSTEMNACHRICHTEN AKTIVIERT ---
-        addChat("System", "Du bist jetzt im Raum: " + room, "other");
-        addChat("System", "Suche Gegner...", "other");
+        // Sofortige Bestätigung im Chat anzeigen
+        addChat("System", `Verbindung wird aufgebaut...`, "other");
+        addChat("System", `Du bist jetzt im Raum: ${room}`, "other");
+        addChat("System", `Suche nach einem Gegner...`, "other");
+        
+        statusEl.textContent = "Warte auf Gegner...";
+    } else {
+        addChat("System", "Fehler: Keine Verbindung zum Server!", "other");
     }
 };
 
-// --- SCHACH LOGIK ---
+// --- 4. SCHACH LOGIK (Gekürzt auf das Wichtigste) ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
