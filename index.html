@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mein Schach - Profi Edition</title>
+    <title>Extreme Chess Multiplayer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="game-container">
         <div class="board-section">
-            <h2 id="status-display">Weiß am Zug</h2>
+            <h2 id="status-display">Schach</h2>
             <div id="chess-board"></div>
             <div class="btn-row main-controls">
                 <button id="undoBtn">Rückgängig</button>
@@ -19,7 +19,7 @@
 
         <div class="sidebar">
             <div class="glass-panel">
-                <strong>Profil & Spielmodus</strong>
+                <strong>Profil & Modus</strong>
                 <input type="text" id="playerName" placeholder="Dein Name..." maxlength="15">
                 
                 <div class="input-group">
@@ -34,7 +34,7 @@
                     <option value="local">Lokal (2 Spieler)</option>
                     <option value="global_chat">Welt-Chat (Global)</option>
                 </select>
-                <div id="user-counter">Live Chat Online: 1</div>
+                <div id="user-counter">Live Chat Online: 0</div>
             </div>
 
             <div id="chat-container">
@@ -50,7 +50,7 @@
 
                 <div class="chat-input-area">
                     <input type="text" id="chat-input" placeholder="Nachricht schreiben..." autocomplete="off">
-                    <button id="send-chat">Sende</button>
+                    <button id="send-chat" style="background:#4caf50;">Sende</button>
                 </div>
             </div>
 
