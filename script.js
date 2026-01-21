@@ -3,14 +3,23 @@ const statusEl = document.getElementById("status-display");
 const chatMessages = document.getElementById("chat-messages");
 const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-chat");
-const gameModeSelect = document.getElementById("gameMode"); // Wichtig für den Bot-Modus
+const gameModeSelect = document.getElementById("gameMode");
+const nameInput = document.getElementById("playerName");
 
-// --- 1. VERBINDUNGEN ---
-// Lädt die KI (engineWorker.js)
-let stockfishWorker = new Worker('engineWorker.js'); 
+// --- 1. INITIALISIERUNG & SPEICHERUNG ---
+// Namen aus dem Speicher laden, falls vorhanden
+if (localStorage.getItem("chessPlayerName")) {
+    nameInput.value = localStorage.getItem("chessPlayerName");
+}
 
-// Verbindung zum Online-Server
+// Name speichern, wenn er geändert wird
+nameInput.oninput = () => {
+    localStorage.setItem("chessPlayerName", nameInput.value);
+};
+
+// --- 2. VERBINDUNGEN ---
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
+let stockfishWorker = new Worker('engineWorker.js'); 
 
 // Sounds
 const moveSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3');
@@ -30,24 +39,23 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- 2. BOT LOGIK (Antwort empfangen) ---
+// --- 3. BOT LOGIK ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
         setTimeout(() => {
-            doMove(move.fr, move.fc, move.tr, move.tc, false); // Bot zieht
+            doMove(move.fr, move.fc, move.tr, move.tc, false);
         }, 600);
     }
 };
 
 function triggerBot() {
-    // Prüft, ob im HTML der Modus "bot" gewählt ist
     if (gameModeSelect && gameModeSelect.value === "bot" && turn === "black") {
-        stockfishWorker.postMessage({ board: board, turn: "black" }); // KI berechnet Zug
+        stockfishWorker.postMessage({ board: board, turn: "black" });
     }
 }
 
-// --- 3. SERVER & CHAT LOGIK ---
+// --- 4. SERVER & CHAT LOGIK ---
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'move' && gameModeSelect.value !== "bot") {
@@ -56,12 +64,15 @@ socket.onmessage = (event) => {
     if (data.type === 'chat' || data.type === 'global_chat') {
         addChat(data.sender || "Gegner", data.text, "other");
     }
+    if (data.type === 'user-count') {
+        document.getElementById("user-counter").textContent = "Online: " + data.count;
+    }
 };
 
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
-    m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`; // Deine CSS Klassen
+    m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
     m.innerHTML = `<strong>${sender}:</strong> ${text}`;
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -69,9 +80,11 @@ function addChat(sender, text, type) {
 
 function sendMessage() {
     const text = chatInput.value.trim();
+    const myName = nameInput.value.trim() || "Gast";
+    
     if (text !== "" && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'chat', text: text }));
-        addChat("Du", text, "me");
+        socket.send(JSON.stringify({ type: 'chat', text: text, sender: myName }));
+        addChat(myName, text, "me");
         chatInput.value = "";
     }
 }
@@ -79,7 +92,14 @@ function sendMessage() {
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
-// --- 4. SCHACH LOGIK ---
+document.getElementById("connectMP").onclick = () => {
+    const room = document.getElementById("roomID").value || "global";
+    const myName = nameInput.value.trim() || "Gast";
+    socket.send(JSON.stringify({ type: 'join', room: room, name: myName }));
+    addChat("System", `Als "${myName}" Raum ${room} beigetreten`, "other");
+};
+
+// --- 5. SCHACH LOGIK ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
@@ -160,7 +180,6 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    // Nur senden, wenn Online-Modus
     if (emit && gameModeSelect.value !== "bot" && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     }
@@ -180,8 +199,6 @@ function doMove(fr, fc, tr, tc, emit = true) {
         else { statusEl.style.color = "white"; isCap ? playSnd(captureSound) : playSnd(moveSound); }
     }
     draw();
-
-    // Bot aktivieren
     if (turn === "black") triggerBot();
 }
 
