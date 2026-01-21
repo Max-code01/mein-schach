@@ -28,11 +28,13 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- 2. KI / BOT ---
+// --- 2. BOT LOGIK ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
-        setTimeout(() => { doMove(move.fr, move.fc, move.tr, move.tc, false); }, 600);
+        setTimeout(() => {
+            doMove(move.fr, move.fc, move.tr, move.tc, false);
+        }, 600);
     }
 };
 
@@ -45,12 +47,18 @@ function triggerBot() {
 // --- 3. SERVER & CHAT LOGIK ---
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    
+    // Züge empfangen (Online-Modus)
     if (data.type === 'move' && gameModeSelect.value === "online") {
         doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
     }
+    
+    // Chat Nachrichten
     if (data.type === 'chat' || data.type === 'global_chat') {
         addChat(data.sender || "Gegner", data.text, "other");
     }
+
+    // Spieler-Zähler & Leaderboard
     if (data.type === 'user-count') {
         document.getElementById("user-counter").textContent = "Online: " + data.count;
     }
@@ -62,10 +70,11 @@ socket.onmessage = (event) => {
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
+    // Spezielles Styling für Systemnachrichten
     if (sender === "System") {
         m.className = "msg other-msg";
-        m.style.color = "#aaa";
-        m.innerHTML = `<i><strong>${sender}:</strong> ${text}</i>`;
+        m.style.borderLeft = "3px solid #f1c40f";
+        m.innerHTML = `<i style="color: #aaa;"><strong>${sender}:</strong> ${text}</i>`;
     } else {
         m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
         m.innerHTML = `<strong>${sender}:</strong> ${text}`;
@@ -91,12 +100,15 @@ function sendMessage() {
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
+// --- VERBINDUNGSMELDUNG ---
 document.getElementById("connectMP").onclick = () => {
     const room = document.getElementById("roomID").value || "global";
     if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
         addChat("System", `Raum ${room} beigetreten.`, "other");
         addChat("System", `Suche Gegner...`, "other");
+    } else {
+        addChat("System", "Verbindung zum Server fehlt!", "other");
     }
 };
 
@@ -186,16 +198,14 @@ function doMove(fr, fc, tr, tc, emit = true) {
     }
 
     turn = (turn === "white" ? "black" : "white");
+    
     const k = findKing(turn);
     const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
     const moves = hasLegalMoves(turn);
 
     if (inCheck) {
-        if (!moves) { 
-            statusEl.textContent = "SCHACHMATT!"; statusEl.style.color = "red"; 
-            // Sieg an den Server senden
-            if(socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'win', playerName: 'WeltGast' }));
-        } else { statusEl.textContent = "SCHACH!"; }
+        if (!moves) { statusEl.textContent = "SCHACHMATT!"; statusEl.style.color = "red"; }
+        else { statusEl.textContent = "SCHACH!"; }
         playSnd(checkSound);
     } else {
         if (!moves) statusEl.textContent = "PATT!";
