@@ -5,16 +5,15 @@ const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-chat");
 const gameModeSelect = document.getElementById("gameMode");
 const leaderboardList = document.getElementById("leaderboard-list");
+const nameInput = document.getElementById("playerName");
 
-// --- 1. VERBINDUNGEN ---
+// --- 1. ALTE VERBINDUNGEN & SOUNDS ---
 let stockfishWorker = new Worker('engineWorker.js'); 
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
-// Sounds
 const moveSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3');
 const captureSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/capture.mp3');
 const checkSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-check.mp3');
-
 function playSnd(s) { s.play().catch(() => {}); }
 
 const PIECE_URLS = {
@@ -28,49 +27,16 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- 2. BOT LOGIK ---
-stockfishWorker.onmessage = function(e) {
-    const move = e.data;
-    if (move && turn === "black") {
-        setTimeout(() => {
-            doMove(move.fr, move.fc, move.tr, move.tc, false);
-        }, 600);
-    }
-};
-
-function triggerBot() {
-    if (gameModeSelect && gameModeSelect.value === "bot" && turn === "black") {
-        stockfishWorker.postMessage({ board: board, turn: "black" });
-    }
+function getMyName() {
+    return (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : "WeltGast";
 }
 
-// --- 3. SERVER & CHAT LOGIK ---
-socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    
-    if (data.type === 'move' && gameModeSelect.value === "online") {
-        doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
-    }
-    
-    if (data.type === 'chat' || data.type === 'global_chat') {
-        addChat(data.sender || "Gegner", data.text, "other");
-    }
-
-    if (data.type === 'user-count') {
-        document.getElementById("user-counter").textContent = "Online: " + data.count;
-    }
-    if (data.type === 'leaderboard') {
-        updateLeaderboard(data.list);
-    }
-};
-
+// --- 2. CHAT & EMOJI ---
 function addChat(sender, text, type) {
-    if (!chatMessages) return;
     const m = document.createElement("div");
     if (sender === "System") {
-        m.className = "msg other-msg";
-        m.style.borderLeft = "3px solid #f1c40f";
-        m.innerHTML = `<i style="color: #aaa;"><strong>${sender}:</strong> ${text}</i>`;
+        m.className = "msg system-msg";
+        m.innerHTML = `System: ${text}`;
     } else {
         m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
         m.innerHTML = `<strong>${sender}:</strong> ${text}`;
@@ -79,35 +45,45 @@ function addChat(sender, text, type) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function updateLeaderboard(list) {
-    if (!leaderboardList) return;
-    leaderboardList.innerHTML = list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
-}
+document.querySelectorAll('.emoji-btn').forEach(btn => {
+    btn.onclick = () => { chatInput.value += btn.textContent; chatInput.focus(); };
+});
 
 function sendMessage() {
     const text = chatInput.value.trim();
     if (text !== "" && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'chat', text: text, sender: 'WeltGast' }));
+        const name = getMyName();
+        socket.send(JSON.stringify({ type: 'chat', text: text, sender: name }));
         addChat("Du", text, "me");
         chatInput.value = "";
     }
 }
-
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
+
+// --- 3. SERVER LOGIK ---
+socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'move' && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
+        doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
+    }
+    if (data.type === 'chat') addChat(data.sender, data.text, "other");
+    if (data.type === 'user-count') document.getElementById("user-counter").textContent = "Live Chat Online: " + data.count;
+    if (data.type === 'leaderboard') {
+        leaderboardList.innerHTML = data.list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
+    }
+};
 
 document.getElementById("connectMP").onclick = () => {
     const room = document.getElementById("roomID").value || "global";
     if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
-        addChat("System", `Raum ${room} beigetreten.`, "other");
-        addChat("System", `Suche Gegner...`, "other");
-    } else {
-        addChat("System", "Verbindung zum Server fehlt!", "other");
+        socket.send(JSON.stringify({ type: 'join', room: room, name: getMyName() }));
+        addChat("System", `Raum ${room} beigetreten.`, "System");
+        addChat("System", `Suche Gegner...`, "System");
     }
 };
 
-// --- 4. SCHACH LOGIK ---
+// --- 4. ALTE SCHACH LOGIK (ALLES ERHALTEN) ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
@@ -188,24 +164,19 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    if (emit && gameModeSelect.value === "online" && socket.readyState === WebSocket.OPEN) {
+    if (emit && socket.readyState === WebSocket.OPEN && gameModeSelect.value !== "local") {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     }
 
     turn = (turn === "white" ? "black" : "white");
-    
     const k = findKing(turn);
     const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
     const moves = hasLegalMoves(turn);
 
     if (inCheck) {
         if (!moves) { 
-            statusEl.textContent = "SCHACHMATT!"; 
-            statusEl.style.color = "red";
-            // NEU: Sieg an den Server melden
-            if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'win', playerName: 'WeltGast' }));
-            }
+            statusEl.textContent = "SCHACHMATT!"; statusEl.style.color = "red";
+            if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
         } else { statusEl.textContent = "SCHACH!"; }
         playSnd(checkSound);
     } else {
@@ -213,14 +184,15 @@ function doMove(fr, fc, tr, tc, emit = true) {
         else { statusEl.style.color = "white"; isCap ? playSnd(captureSound) : playSnd(moveSound); }
     }
     draw();
-    if (turn === "black") triggerBot();
+    if (turn === "black" && gameModeSelect.value === "bot") {
+        stockfishWorker.postMessage({ board: board, turn: "black" });
+    }
 }
 
 function draw() {
     boardEl.innerHTML = "";
     const k = findKing(turn);
     const check = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
-
     board.forEach((row, r) => {
         row.forEach((p, c) => {
             const d = document.createElement("div");
@@ -253,4 +225,5 @@ document.getElementById("undoBtn").onclick = () => {
     }
 };
 document.getElementById("resetBtn").onclick = resetGame;
+stockfishWorker.onmessage = (e) => { if(e.data && turn === "black") setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600); };
 resetGame();
