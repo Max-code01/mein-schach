@@ -253,3 +253,4 @@ document.getElementById("undoBtn").onclick = () => {
 };
 document.getElementById("resetBtn").onclick = resetGame;
 resetGame();
+
