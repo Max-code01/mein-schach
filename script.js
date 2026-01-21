@@ -3,14 +3,14 @@ const statusEl = document.getElementById("status-display");
 const chatMessages = document.getElementById("chat-messages");
 const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-chat");
-const gameModeSelect = document.getElementById("gameMode");
+const gameModeSelect = document.getElementById("gameMode"); // Wichtig für den Bot-Modus
 
-// --- 1. VERBINDUNGEN (Das hat in deinem Code gefehlt) ---
+// --- 1. VERBINDUNGEN ---
+// Lädt die KI (engineWorker.js)
+let stockfishWorker = new Worker('engineWorker.js'); 
+
 // Verbindung zum Online-Server
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
-
-// Verbindung zur KI (engineWorker.js)
-let stockfishWorker = new Worker('engineWorker.js');
 
 // Sounds
 const moveSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3');
@@ -30,20 +30,20 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- 2. BOT LOGIK (Antwort verarbeiten) ---
+// --- 2. BOT LOGIK (Antwort empfangen) ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
         setTimeout(() => {
-            doMove(move.fr, move.fc, move.tr, move.tc, false);
+            doMove(move.fr, move.fc, move.tr, move.tc, false); // Bot zieht
         }, 600);
     }
 };
 
 function triggerBot() {
-    // Prüfen, ob "Gegen Bot" im Menü ausgewählt ist
+    // Prüft, ob im HTML der Modus "bot" gewählt ist
     if (gameModeSelect && gameModeSelect.value === "bot" && turn === "black") {
-        stockfishWorker.postMessage({ board: board, turn: "black" });
+        stockfishWorker.postMessage({ board: board, turn: "black" }); // KI berechnet Zug
     }
 }
 
@@ -61,7 +61,7 @@ socket.onmessage = (event) => {
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
-    m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
+    m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`; // Deine CSS Klassen
     m.innerHTML = `<strong>${sender}:</strong> ${text}`;
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -79,13 +79,7 @@ function sendMessage() {
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
-document.getElementById("connectMP").onclick = () => {
-    const room = document.getElementById("roomID").value || "global";
-    socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
-    addChat("System", "Raum " + room + " beigetreten", "other");
-};
-
-// --- 4. SCHACH LOGIK (Optimiert) ---
+// --- 4. SCHACH LOGIK ---
 function resetGame() {
     board = [
         ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
@@ -104,7 +98,6 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
     const p = b[fr][fc]; if(!p) return false;
     const target = b[tr][tc]; if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
     const dr = Math.abs(tr - fr), dc = Math.abs(tc - fc), type = p.toLowerCase();
-
     if(type === 'p') {
         const dir = (p === 'P') ? -1 : 1;
         if(fc === tc && b[tr][tc] === "") {
@@ -167,7 +160,7 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    // Nur senden, wenn wir NICHT gegen den Bot spielen
+    // Nur senden, wenn Online-Modus
     if (emit && gameModeSelect.value !== "bot" && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     }
@@ -186,10 +179,9 @@ function doMove(fr, fc, tr, tc, emit = true) {
         if (!moves) statusEl.textContent = "PATT!";
         else { statusEl.style.color = "white"; isCap ? playSnd(captureSound) : playSnd(moveSound); }
     }
-    
     draw();
 
-    // Bot anstoßen
+    // Bot aktivieren
     if (turn === "black") triggerBot();
 }
 
