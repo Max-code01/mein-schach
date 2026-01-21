@@ -1,4 +1,3 @@
-// --- ELEMENTE ---
 const boardEl = document.getElementById("chess-board");
 const statusEl = document.getElementById("status-display");
 const chatMessages = document.getElementById("chat-messages");
@@ -7,15 +6,18 @@ const sendBtn = document.getElementById("send-chat");
 const gameModeSelect = document.getElementById("gameMode");
 
 // --- VERBINDUNGEN ---
-// 1. Online Server
+// 1. Online Server (Render-Adresse)
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
-// 2. KI Worker (für Bot-Modus)
+
+// 2. KI Worker (engineWorker.js)
 let stockfishWorker = new Worker('engineWorker.js');
 
-// --- SOUNDS ---
+// Sounds
 const moveSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3');
 const captureSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/capture.mp3');
 const checkSound = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-check.mp3');
+
+function playSnd(s) { s.play().catch(() => {}); }
 
 const PIECE_URLS = {
     'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', 'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
@@ -28,7 +30,7 @@ const PIECE_URLS = {
 
 let board, turn = "white", selected = null, history = [];
 
-// --- BOT / KI LOGIK ---
+// --- BOT LOGIK ---
 stockfishWorker.onmessage = function(e) {
     const move = e.data;
     if (move && turn === "black") {
@@ -39,30 +41,29 @@ stockfishWorker.onmessage = function(e) {
 };
 
 function triggerBot() {
-    if (gameModeSelect.value === "bot" && turn === "black") {
+    if (gameModeSelect && gameModeSelect.value === "bot" && turn === "black") {
         stockfishWorker.postMessage({ board: board, turn: "black" });
     }
 }
 
-// --- MULTIPLAYER LOGIK ---
+// --- SERVER KOMMUNIKATION ---
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'move' && gameModeSelect.value !== "bot") {
         doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
     }
-    if (data.type === 'chat') {
-        addChat("Gegner", data.text, "other");
+    if (data.type === 'chat' || data.type === 'global_chat') {
+        addChat(data.sender || "Gegner", data.text, "other");
+    }
+    if (data.type === 'user-count') {
+        const counter = document.getElementById("user-counter");
+        if (counter) counter.textContent = "Online: " + data.count;
     }
 };
 
-document.getElementById("connectMP").onclick = () => {
-    const room = document.getElementById("roomID").value || "global";
-    socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
-    addChat("System", `Raum ${room} beigetreten`, "other");
-};
-
-// --- CHAT ---
+// --- CHAT LOGIK (Genau wie vorher) ---
 function addChat(sender, text, type) {
+    if (!chatMessages) return;
     const m = document.createElement("div");
     m.className = `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
     m.innerHTML = `<strong>${sender}:</strong> ${text}`;
@@ -72,13 +73,22 @@ function addChat(sender, text, type) {
 
 function sendMessage() {
     const text = chatInput.value.trim();
-    if (text && socket.readyState === WebSocket.OPEN) {
+    if (text !== "" && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'chat', text: text }));
         addChat("Du", text, "me");
         chatInput.value = "";
     }
 }
+
 sendBtn.onclick = sendMessage;
+chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
+
+// --- MULTIPLAYER CONNECT ---
+document.getElementById("connectMP").onclick = () => {
+    const room = document.getElementById("roomID").value || "global";
+    socket.send(JSON.stringify({ type: 'join', room: room, name: 'WeltGast' }));
+    addChat("System", "Raum " + room + " beigetreten", "other");
+};
 
 // --- SCHACH LOGIK ---
 function resetGame() {
@@ -88,58 +98,139 @@ function resetGame() {
         ["","","","","","","",""], ["","","","","","","",""],
         ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
     ];
-    turn = "white"; selected = null; draw();
+    turn = "white"; selected = null; history = [];
+    statusEl.style.color = "white";
+    draw();
 }
 
-function isOwn(p) { return p && (turn === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
+function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
+
+function canMoveLogic(fr, fc, tr, tc, b = board) {
+    const p = b[fr][fc]; if(!p) return false;
+    const target = b[tr][tc]; if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
+    const dr = Math.abs(tr - fr), dc = Math.abs(tc - fc), type = p.toLowerCase();
+
+    if(type === 'p') {
+        const dir = (p === 'P') ? -1 : 1;
+        if(fc === tc && b[tr][tc] === "") {
+            if(tr - fr === dir) return true;
+            if(tr - fr === 2*dir && (fr === 1 || fr === 6) && b[fr+dir][fc] === "") return true;
+        } else if(dc === 1 && tr - fr === dir && b[tr][tc] !== "") return true;
+        return false;
+    }
+    const pathClear = () => {
+        const rD = Math.sign(tr - fr), cD = Math.sign(tc - fc);
+        let r = fr + rD, c = fc + cD;
+        while(r !== tr || c !== tc) { if(b[r][c] !== "") return false; r += rD; c += cD; }
+        return true;
+    };
+    if(type === 'r') return (fr === tr || fc === tc) && pathClear();
+    if(type === 'b') return dr === dc && pathClear();
+    if(type === 'q') return (fr === tr || fc === tc || dr === dc) && pathClear();
+    if(type === 'n') return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
+    if(type === 'k') return dr <= 1 && dc <= 1;
+    return false;
+}
+
+function findKing(c, b = board) {
+    const t = (c === "white" ? "K" : "k");
+    for(let r=0; r<8; r++) for(let cIdx=0; cIdx<8; cIdx++) if(b[r][cIdx] === t) return {r, c: cIdx};
+    return {r:0, c:0};
+}
+
+function isAttacked(tr, tc, attackerColor, b = board) {
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
+        if(b[r][c] && isOwn(b[r][c], attackerColor) && canMoveLogic(r, c, tr, tc, b)) return true;
+    return false;
+}
+
+function canMove(fr, fc, tr, tc) {
+    if(!canMoveLogic(fr, fc, tr, tc)) return false;
+    const p = board[fr][fc], t = board[tr][tc];
+    board[tr][tc] = p; board[fr][fc] = "";
+    const color = isOwn(p, "white") ? "white" : "black";
+    const k = findKing(color);
+    const safe = !isAttacked(k.r, k.c, color === "white" ? "black" : "white");
+    board[fr][fc] = p; board[tr][tc] = t;
+    return safe;
+}
+
+function hasLegalMoves(color) {
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
+        if(board[r][c] && isOwn(board[r][c], color)) {
+            for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) if(canMove(r, c, tr, tc)) return true;
+        }
+    }
+    return false;
+}
 
 function doMove(fr, fc, tr, tc, emit = true) {
+    history.push({ board: JSON.parse(JSON.stringify(board)), turn });
     const isCap = board[tr][tc] !== "";
-    board[tr][tc] = board[fr][fc];
-    board[fr][fc] = "";
-
-    // Bauernumwandlung
+    board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
+    
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    // Nur senden, wenn wir NICHT gegen den Bot spielen
     if (emit && gameModeSelect.value !== "bot" && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     }
 
-    isCap ? captureSound.play() : moveSound.play();
-    turn = turn === "white" ? "black" : "white";
+    turn = (turn === "white" ? "black" : "white");
+    
+    const k = findKing(turn);
+    const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+    const moves = hasLegalMoves(turn);
+
+    if (inCheck) {
+        if (!moves) { statusEl.textContent = "SCHACHMATT!"; statusEl.style.color = "red"; }
+        else { statusEl.textContent = "SCHACH!"; }
+        playSnd(checkSound);
+    } else {
+        if (!moves) statusEl.textContent = "PATT!";
+        else { statusEl.style.color = "white"; isCap ? playSnd(captureSound) : playSnd(moveSound); }
+    }
+    
     draw();
 
-    // KI antwortet
     if (turn === "black") triggerBot();
 }
 
 function draw() {
     boardEl.innerHTML = "";
-    board.forEach((row, r) => row.forEach((p, c) => {
-        const d = document.createElement("div");
-        d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
-        if (selected && selected.r === r && selected.c === c) d.classList.add("selected");
-        if (p) {
-            const img = document.createElement("img");
-            img.src = PIECE_URLS[p]; img.style.width = "85%";
-            d.appendChild(img);
-        }
-        d.onclick = () => {
-            if (selected) {
-                // Hier könnte man noch canMove(selected.r, selected.c, r, c) prüfen
-                doMove(selected.r, selected.c, r, c);
-                selected = null;
-            } else if (isOwn(p)) {
-                selected = {r, c};
+    const k = findKing(turn);
+    const check = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+
+    board.forEach((row, r) => {
+        row.forEach((p, c) => {
+            const d = document.createElement("div");
+            d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
+            if(check && k.r === r && k.c === c) d.style.backgroundColor = "rgba(255, 0, 0, 0.6)";
+            if(p) {
+                const img = document.createElement("img"); img.src = PIECE_URLS[p];
+                img.style.width = "85%"; d.appendChild(img);
             }
-            draw();
-        };
-        boardEl.appendChild(d);
-    }));
-    statusEl.textContent = turn === "white" ? "Weiß am Zug" : "Schwarz am Zug";
+            d.onclick = () => {
+                if(selected) {
+                    if(canMove(selected.r, selected.c, r, c)) { doMove(selected.r, selected.c, r, c); selected = null; }
+                    else { selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null; }
+                } else if(board[r][c] && isOwn(board[r][c])) { selected = {r, c}; }
+                draw();
+            };
+            boardEl.appendChild(d);
+        });
+    });
+    if(!statusEl.textContent.includes("MATT") && !statusEl.textContent.includes("SCHACH")) {
+        statusEl.textContent = (turn === "white" ? "Weiß am Zug" : "Schwarz am Zug");
+    }
 }
 
+document.getElementById("undoBtn").onclick = () => {
+    if(history.length > 0) { 
+        const last = history.pop(); board = last.board; turn = last.turn; 
+        selected = null; statusEl.style.color = "white"; draw(); 
+    }
+};
 document.getElementById("resetBtn").onclick = resetGame;
 resetGame();
