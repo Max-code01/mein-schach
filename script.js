@@ -6,10 +6,10 @@ const sendBtn = document.getElementById("send-chat");
 const gameModeSelect = document.getElementById("gameMode");
 
 // --- VERBINDUNGEN ---
-// 1. Online Server (Render-Adresse)
+// 1. Online Server (Render)
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
-// 2. KI Worker (engineWorker.js)
+// 2. KI Worker (engineWorker.js laden)
 let stockfishWorker = new Worker('engineWorker.js');
 
 // Sounds
@@ -61,7 +61,7 @@ socket.onmessage = (event) => {
     }
 };
 
-// --- CHAT LOGIK (Genau wie vorher) ---
+// --- CHAT LOGIK ---
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
@@ -172,6 +172,7 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
+    // Senden nur im Online-Modus
     if (emit && gameModeSelect.value !== "bot" && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc} }));
     }
@@ -193,6 +194,7 @@ function doMove(fr, fc, tr, tc, emit = true) {
     
     draw();
 
+    // Bot triggern, wenn Schwarz am Zug ist
     if (turn === "black") triggerBot();
 }
 
