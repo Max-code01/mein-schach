@@ -15,20 +15,18 @@
 
         <div class="sidebar">
             <div class="controls">
-                <label style="font-size: 0.8em; color: #aaa;">Spiel-Modus:</label>
                 <select id="gameMode">
-                    <option value="friends">Gegen Freunde (Lokal)</option>
-                    <option value="bot">Gegen Bot (Smart)</option>
                     <option value="online">Online Multiplayer</option>
+                    <option value="random">Zufälliger Gegner</option>
+                    <option value="pvp">Lokal (2 Spieler)</option>
+                    <option value="bot">Gegen Bot (Smart)</option>
+                    <option value="global_chat">Welt-Chat (Global)</option>
                 </select>
                 
-                <label style="font-size: 0.8em; color: #aaa; margin-top: 10px;">Dein Profil:</label>
-                <input type="text" id="playerName" placeholder="Dein Name...">
+                <input type="text" id="roomID" placeholder="Raum-ID für Multiplayer">
+                <button id="connectMP">Mit Server Verbinden</button>
                 
-                <input type="text" id="roomID" placeholder="Raum-ID (z.B. 1234)">
-                <button id="connectMP" style="background: #27ae60;">Server Verbinden</button>
-                
-                <div class="btn-row" style="display: flex; gap: 5px; margin-top: 10px;">
+                <div class="btn-row">
                     <button id="undoBtn" style="background: #e67e22; flex: 1;">Undo</button>
                     <button id="resetBtn" style="background: #e74c3c; flex: 1;">Reset</button>
                 </div>
@@ -41,9 +39,14 @@
                 </div>
                 <div id="chat-messages"></div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Nachricht...">
-                    <button id="send-chat">Senden</button>
+                    <input type="text" id="chat-input" placeholder="Nachricht schreiben...">
+                    <button id="send-chat">Sende</button>
                 </div>
+            </div>
+
+            <div class="leaderboard">
+                <span class="leaderboard-title">🏆 Top Spieler:</span>
+                <div id="leaderboard-list" style="color: #ccc;">Lade Daten...</div>
             </div>
         </div>
     </div>
