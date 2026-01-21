@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-// Erstellt einen einfachen HTTP-Server, damit Render den Port binden kann
+// Einfacher HTTP-Server, damit Render den Dienst als aktiv erkennt
 const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end("Schach-Server läuft!");
@@ -9,83 +9,114 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-let leaderboard = {}; // Speichert { "Name": Siege }
+let leaderboard = {}; 
+let waitingPlayer = null; // Warteschlange für "Zufälliger Gegner"
 
 wss.on('connection', (ws) => {
-    console.log("Ein Spieler hat sich verbunden.");
-
-    // 1. Sofort das aktuelle Leaderboard an den neuen Spieler senden
-    sendLeaderboardTo(ws);
-    // 2. Spieler-Zähler an alle senden
+    console.log("Neuer Spieler verbunden");
+    
+    // Initial-Daten senden
+    sendLeaderboard(ws);
     broadcastUserCount();
 
     ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
+        const data = JSON.parse(message);
 
-            // --- WIN LOGIK ---
-            if (data.type === 'win') {
-                const name = data.playerName || "WeltGast";
-                leaderboard[name] = (leaderboard[name] || 0) + 1;
-                console.log(`Sieg für ${name}! Neuer Stand: ${leaderboard[name]}`);
-                broadcastLeaderboard(); // Alle Spieler über neues Ranking informieren
+        // --- 1. MATCHMAKING (Zufälliger Gegner) ---
+        if (data.type === 'find_random') {
+            // Prüfen, ob bereits jemand wartet und noch verbunden ist
+            if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
+                const roomID = "random_" + Math.floor(Math.random() * 100000);
+                
+                const matchMsg = JSON.stringify({ 
+                    type: 'join', 
+                    room: roomID, 
+                    systemMsg: "Gegner gefunden! Spiel startet... ⚔️" 
+                });
+                
+                // Beide Spieler in den neuen Raum schicken
+                ws.send(matchMsg);
+                waitingPlayer.send(matchMsg);
+                
+                console.log(`Match erstellt: Raum ${roomID}`);
+                waitingPlayer = null; 
+            } else {
+                // Spieler auf die Warteliste setzen
+                waitingPlayer = ws;
+                ws.send(JSON.stringify({ type: 'chat', sender: 'System', text: 'Warten auf Gegner... ⏳' }));
             }
+        }
 
-            // --- WEITERLEITUNG (Züge, Chat, Join) ---
-            // Schickt die Nachricht an alle ANDEREN verbundenen Spieler
+        // --- 2. JOIN RAUM ---
+        if (data.type === 'join' && data.room) {
+            ws.room = data.room;
+            ws.playerName = data.name || "WeltGast";
+            console.log(`${ws.playerName} ist Raum ${ws.room} beigetreten`);
+        }
+
+        // --- 3. CHAT & MOVES WEITERLEITEN ---
+        if (data.type === 'chat' || data.type === 'move') {
+            const msg = JSON.stringify(data);
             wss.clients.forEach(client => {
-                if (client !== ws && client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify(data));
+                // Nachricht an alle im gleichen Raum senden (außer an den Absender selbst)
+                if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                    client.send(msg);
                 }
             });
+        }
 
-        } catch (e) {
-            console.error("Fehler beim Verarbeiten der Nachricht:", e);
+        // --- 4. SIEG & LEADERBOARD ---
+        if (data.type === 'win') {
+            const name = data.playerName || "Unbekannt";
+            leaderboard[name] = (leaderboard[name] || 0) + 1;
+            
+            // Allen Spielern (global) mitteilen und Leaderboard updaten
+            broadcastToAll({ type: 'win', playerName: name });
+            broadcastLeaderboard();
         }
     });
 
     ws.on('close', () => {
-        console.log("Ein Spieler hat die Verbindung getrennt.");
+        if (waitingPlayer === ws) {
+            waitingPlayer = null;
+        }
         broadcastUserCount();
+        console.log("Verbindung geschlossen");
     });
 });
 
-// Funktion: Schickt das Leaderboard nur an einen bestimmten Spieler
-function sendLeaderboardTo(client) {
-    const sorted = Object.entries(leaderboard)
-        .map(([name, wins]) => ({ name, wins }))
-        .sort((a, b) => b.wins - a.wins)
-        .slice(0, 5); // Top 5
-    
-    client.send(JSON.stringify({ type: 'leaderboard', list: sorted }));
+// --- HILFSFUNKTIONEN ---
+
+function broadcastToAll(data) {
+    const msg = JSON.stringify(data);
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(msg);
+        }
+    });
 }
 
-// Funktion: Schickt das Leaderboard an ALLE Spieler
-function broadcastLeaderboard() {
-    const sorted = Object.entries(leaderboard)
+function broadcastUserCount() {
+    broadcastToAll({ type: 'user-count', count: wss.clients.size });
+}
+
+function sendLeaderboard(ws) {
+    const list = Object.entries(leaderboard)
         .map(([name, wins]) => ({ name, wins }))
         .sort((a, b) => b.wins - a.wins)
         .slice(0, 5);
-    
-    const msg = JSON.stringify({ type: 'leaderboard', list: sorted });
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(msg);
-        }
-    });
+    ws.send(JSON.stringify({ type: 'leaderboard', list }));
 }
 
-// Funktion: Schickt die aktuelle Spieleranzahl an alle
-function broadcastUserCount() {
-    const msg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(msg);
-        }
-    });
+function broadcastLeaderboard() {
+    const list = Object.entries(leaderboard)
+        .map(([name, wins]) => ({ name, wins }))
+        .sort((a, b) => b.wins - a.wins)
+        .slice(0, 5);
+    broadcastToAll({ type: 'leaderboard', list });
 }
 
-// Port-Einstellung für Render.com
+// Port für Render.com
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`Server läuft auf Port ${PORT}`);
