@@ -1,5 +1,5 @@
 body { background: #1a1a1a; color: white; font-family: sans-serif; display: flex; justify-content: center; padding: 20px; }
-.game-container { display: flex; gap: 20px; max-width: 1000px; width: 100%; }
+.game-container { display: flex; gap: 20px; max-width: 1100px; width: 100%; }
 
 /* Schachbrett */
 #chess-board { display: grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px); border: 5px solid #333; }
@@ -9,16 +9,30 @@ body { background: #1a1a1a; color: white; font-family: sans-serif; display: flex
 .selected { background-color: rgba(255, 255, 0, 0.5) !important; }
 
 /* Sidebar & Chat-System */
-.sidebar { width: 350px; display: flex; flex-direction: column; gap: 10px; }
+.sidebar { width: 380px; display: flex; flex-direction: column; gap: 15px; }
 .controls { background: #222; padding: 15px; border-radius: 10px; border: 1px solid #444; display: flex; flex-direction: column; gap: 10px; }
-#chat-container { display: flex; flex-direction: column; height: 450px; background: #2a2a2a; border-radius: 10px; border: 1px solid #444; }
-#chat-messages { flex-grow: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 
-.msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 0.9em; word-wrap: break-word; }
-.my-msg { align-self: flex-end; background: #007bff; color: white; border-bottom-right-radius: 2px; }
-.other-msg { align-self: flex-start; background: #444; color: #eee; border-bottom-left-radius: 2px; }
+#chat-container { display: flex; flex-direction: column; height: 500px; background: #252525; border-radius: 15px; border: 1px solid #444; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+#chat-messages { flex-grow: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
 
-.chat-input-area { display: flex; padding: 10px; background: #222; gap: 5px; }
-input, select, button { padding: 8px; border-radius: 5px; border: none; background: #333; color: white; }
-button { background: #4caf50; cursor: pointer; font-weight: bold; }
-.btn-row { display: flex; gap: 5px; }
+/* Chat Bubbles */
+.msg { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: 0.95em; line-height: 1.4; position: relative; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.my-msg { align-self: flex-end; background: linear-gradient(135deg, #007bff, #0056b3); color: white; border-bottom-right-radius: 4px; }
+.other-msg { align-self: flex-start; background: #3d3d3d; color: #eee; border-bottom-left-radius: 4px; }
+
+.system-msg { align-self: center; background: rgba(241, 196, 15, 0.1); color: #f1c40f; border: 1px dashed #f1c40f; border-radius: 10px; font-size: 0.85em; padding: 5px 15px; text-align: center; margin: 5px 0; width: 90%; }
+.msg-time { display: block; font-size: 0.7em; margin-top: 5px; opacity: 0.6; }
+
+/* Inputs */
+.chat-input-area { display: flex; padding: 12px; background: #1e1e1e; gap: 8px; border-top: 1px solid #333; }
+input, select, button { padding: 10px; border-radius: 5px; border: none; background: #333; color: white; outline: none; }
+button { background: #4caf50; cursor: pointer; font-weight: bold; transition: 0.2s; }
+button:hover { filter: brightness(1.2); }
+.emoji-btn { cursor: pointer; font-size: 1.2em; transition: transform 0.1s; }
+.emoji-btn:hover { transform: scale(1.3); }
+
+/* Leaderboard */
+#leaderboard-list div { padding: 5px 0; border-bottom: 1px solid #333; }
+#leaderboard-list div:nth-child(1) { color: #ffd700; font-weight: bold; }
