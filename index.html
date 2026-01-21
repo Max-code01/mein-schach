@@ -3,60 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extreme Chess Multiplayer</title>
+    <title>Chess Extreme - Ultimate Version</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="game-container">
         <div class="board-section">
-            <h2 id="status-display">Schach</h2>
+            <div class="info-bar">
+                <h2 id="status-display">Warte auf Verbindung...</h2>
+                <div id="turn-indicator"></div>
+            </div>
             <div id="chess-board"></div>
-            <div class="btn-row main-controls">
-                <button id="undoBtn">Rückgängig</button>
-                <button id="resetBtn">Neues Spiel</button>
+            <div class="control-row">
+                <button id="undoBtn" title="Letzten Zug rückgängig machen">↩ Rückgängig</button>
+                <button id="resetBtn" title="Spiel komplett neu starten">🆕 Neues Spiel</button>
+                <button id="resignBtn" title="Das Spiel aufgeben">🚩 Aufgeben</button>
             </div>
         </div>
 
         <div class="sidebar">
-            <div class="glass-panel">
-                <strong>Profil & Modus</strong>
+            <div class="glass-panel profile-section">
+                <strong>👤 Spieler-Profil</strong>
                 <input type="text" id="playerName" placeholder="Dein Name..." maxlength="15">
-                
-                <div class="input-group">
-                    <input type="text" id="roomID" placeholder="Raum ID (z.B. 111)">
-                    <button id="connectMP">Verbinden</button>
+                <div class="server-status">
+                    <span id="user-counter">Online: 0</span>
+                    <span id="ping-indicator">● Live</span>
                 </div>
+            </div>
 
+            <div class="glass-panel mode-section">
+                <strong>🎮 Spielmodus</strong>
                 <select id="gameMode">
-                    <option value="bot">Gegen Bot (Smart)</option>
-                    <option value="online">Online Multiplayer</option>
-                    <option value="random">Zufälliger Gegner</option>
-                    <option value="local">Lokal (2 Spieler)</option>
-                    <option value="global_chat">Welt-Chat (Global)</option>
+                    <option value="bot">🤖 Gegen den Bot (Smart)</option>
+                    <option value="online">🌐 Online Multiplayer (Raum ID)</option>
+                    <option value="random">🎲 Zufälliger Gegner (Suche)</option>
+                    <option value="local">👥 Lokal (2 Spieler am Gerät)</option>
+                    <option value="global_chat">💬 Welt-Chat (Nur Chat)</option>
                 </select>
-                <div id="user-counter">Live Chat Online: 0</div>
+                <div class="input-group" id="room-input-group">
+                    <input type="text" id="roomID" placeholder="Raum ID eingeben">
+                    <button id="connectMP">Beitreten</button>
+                </div>
             </div>
 
             <div id="chat-container">
                 <div id="chat-messages"></div>
-                
                 <div id="emoji-bar">
-                    <span class="emoji-btn">😊</span>
-                    <span class="emoji-btn">😂</span>
-                    <span class="emoji-btn">🔥</span>
-                    <span class="emoji-btn">👍</span>
-                    <span class="emoji-btn">♟️</span>
+                    <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
+                    <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
+                    <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
                 </div>
-
                 <div class="chat-input-area">
                     <input type="text" id="chat-input" placeholder="Nachricht schreiben..." autocomplete="off">
-                    <button id="send-chat" style="background:#4caf50;">Sende</button>
+                    <button id="send-chat">Senden</button>
                 </div>
             </div>
 
-            <div class="glass-panel">
-                <strong>🏆 Top Spieler:</strong>
-                <div id="leaderboard-list">Lade Daten...</div>
+            <div class="glass-panel leaderboard">
+                <strong>🏆 Beste Spieler</strong>
+                <div id="leaderboard-list">Lade Statistiken...</div>
             </div>
         </div>
     </div>
