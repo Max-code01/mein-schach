@@ -48,17 +48,14 @@ function triggerBot() {
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
     
-    // Züge empfangen (Online-Modus)
     if (data.type === 'move' && gameModeSelect.value === "online") {
         doMove(data.move.fr, data.move.fc, data.move.tr, data.move.tc, false);
     }
     
-    // Chat Nachrichten
     if (data.type === 'chat' || data.type === 'global_chat') {
         addChat(data.sender || "Gegner", data.text, "other");
     }
 
-    // Spieler-Zähler & Leaderboard
     if (data.type === 'user-count') {
         document.getElementById("user-counter").textContent = "Online: " + data.count;
     }
@@ -70,7 +67,6 @@ socket.onmessage = (event) => {
 function addChat(sender, text, type) {
     if (!chatMessages) return;
     const m = document.createElement("div");
-    // Spezielles Styling für Systemnachrichten
     if (sender === "System") {
         m.className = "msg other-msg";
         m.style.borderLeft = "3px solid #f1c40f";
@@ -100,7 +96,6 @@ function sendMessage() {
 sendBtn.onclick = sendMessage;
 chatInput.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
-// --- VERBINDUNGSMELDUNG ---
 document.getElementById("connectMP").onclick = () => {
     const room = document.getElementById("roomID").value || "global";
     if (socket.readyState === WebSocket.OPEN) {
@@ -204,8 +199,14 @@ function doMove(fr, fc, tr, tc, emit = true) {
     const moves = hasLegalMoves(turn);
 
     if (inCheck) {
-        if (!moves) { statusEl.textContent = "SCHACHMATT!"; statusEl.style.color = "red"; }
-        else { statusEl.textContent = "SCHACH!"; }
+        if (!moves) { 
+            statusEl.textContent = "SCHACHMATT!"; 
+            statusEl.style.color = "red";
+            // NEU: Sieg an den Server melden
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'win', playerName: 'WeltGast' }));
+            }
+        } else { statusEl.textContent = "SCHACH!"; }
         playSnd(checkSound);
     } else {
         if (!moves) statusEl.textContent = "PATT!";
@@ -253,4 +254,3 @@ document.getElementById("undoBtn").onclick = () => {
 };
 document.getElementById("resetBtn").onclick = resetGame;
 resetGame();
-
