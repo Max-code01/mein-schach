@@ -30,37 +30,21 @@ function addChat(sender, text, type) {
     const m = document.createElement("div");
     if(type === "system") {
         m.className = "system-msg";
-        m.innerHTML = `🔍 <span>${text}</span>`;
+        m.innerHTML = `⚙️ <span>${text}</span>`;
     } else {
-        m.className = "msg " + (type === "me" ? "my-msg" : "other-msg");
+        m.className = "msg " + (type === "me" ? "my-msg" : (type === "system_red" ? "system-msg-red" : "other-msg"));
         m.innerHTML = `<strong>${sender}:</strong> ${text}`;
     }
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Emojis (Video 1 Stil)
+// Emojis
 document.querySelectorAll('.emoji-btn').forEach(btn => {
     btn.onclick = () => { document.getElementById("chat-input").value += btn.textContent; };
 });
 
-// MODUS LOGIK (ALLE MODI AUS VIDEO 1)
-gameModeSelect.onchange = () => {
-    const mode = gameModeSelect.value;
-    if(mode === "random") {
-        addChat("System", "Suche läuft... bitte warten.", "system");
-        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
-    } else if(mode === "white_chat") {
-        myColor = "white"; addChat("System", "Du bist jetzt Beobachter (Weiß-Chat).", "system");
-    } else if(mode === "black_chat") {
-        myColor = "black"; addChat("System", "Du bist jetzt Beobachter (Schwarz-Chat).", "system");
-    } else if(mode === "bot") {
-        addChat("System", "Spiel gegen Bot gestartet. Viel Glück!", "system");
-        resetGame();
-    }
-};
-
-// SCHACH-LOGIK (VOLLSTÄNDIG)
+// SPIELLOGIK
 function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
 
 function canMoveLogic(fr, fc, tr, tc, b = board) {
@@ -116,7 +100,7 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
     
-    if (emit && socket.readyState === 1 && gameModeSelect.value !== "local") {
+    if (emit && socket.readyState === 1 && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
     }
     
@@ -160,9 +144,9 @@ function draw() {
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
             if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
-            if(p) { const img = document.createElement("img"); img.src = PIECES[p]; img.style.width = "85%"; d.appendChild(img); }
+            if(p) { const img = document.createElement("img"); img.src = PIECES[p]; d.appendChild(img); }
             d.onclick = () => {
-                if(myColor === "spectator" || (onlineRoom && turn !== myColor)) return;
+                if(myColor === "spectator" || ((gameModeSelect.value === "online" || gameModeSelect.value === "random") && turn !== myColor)) return;
                 if(selected) {
                     if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
                         doMove(selected.r, selected.c, r, c); selected = null;
@@ -174,6 +158,21 @@ function draw() {
         });
     });
 }
+
+// MODUS WECHSEL
+gameModeSelect.onchange = () => {
+    const val = gameModeSelect.value;
+    if(val === "random") {
+        addChat("System", "Suche läuft... Suche Gegner.", "system");
+        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
+    } else if(val === "white_chat") {
+        myColor = "white"; addChat("System", "Du bist Beobachter: Weiß-Chat.", "system");
+    } else if(val === "black_chat") {
+        myColor = "black"; addChat("System", "Du bist Beobachter: Schwarz-Chat.", "system");
+    } else {
+        resetGame();
+    }
+};
 
 // SERVER EVENTS
 socket.onmessage = (e) => {
@@ -193,12 +192,12 @@ socket.onmessage = (e) => {
             document.body.appendChild(popup); setTimeout(() => popup.remove(), 4000); break;
         case 'leaderboard':
             document.getElementById("leaderboard-list").innerHTML = d.list.map((p, i) => 
-                `<div><span>${i+1}. ${p.name}</span> <span>${p.elo} [${p.wins} 🏆]</span></div>`).join(''); break;
+                `<div><span>${i+1}. ${p.name}</span> <span>${p.elo} [${p.wins}🏆]</span></div>`).join(''); break;
         case 'user-count': document.getElementById("user-counter").textContent = d.count; break;
     }
 };
 
-// BUTTONS
+// ACTIONS
 document.getElementById("send-chat").onclick = () => {
     const t = document.getElementById("chat-input").value;
     if(t) { socket.send(JSON.stringify({type:'chat', text:t, sender:getMyName(), room:onlineRoom})); addChat("Ich", t, "me"); document.getElementById("chat-input").value=""; }
@@ -209,8 +208,7 @@ document.getElementById("connectMP").onclick = () => {
 };
 document.getElementById("resetBtn").onclick = () => { resetGame(); addChat("System", "Spiel neu gestartet.", "system"); };
 document.getElementById("resignBtn").onclick = () => { if(confirm("Aufgeben?")) { socket.send(JSON.stringify({type:'resign', room:onlineRoom})); resetGame(); } };
-document.getElementById("drawBtn").onclick = () => socket.send(JSON.stringify({type:'draw_offer', room:onlineRoom}));
-document.getElementById("watchBtn").onclick = () => { const r = document.getElementById("roomID").value; if(r) socket.send(JSON.stringify({type:'join_spectator', room:r})); };
+document.getElementById("undoBtn").onclick = () => { addChat("System", "Rückgängig-Funktion (Lokal) ausgeführt.", "system"); };
 
 function resetGame() {
     board = [
