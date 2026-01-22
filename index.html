@@ -2,45 +2,45 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess Extreme - Ultimate Version</title>
     <link rel="stylesheet" href="style.css">
+    <title>Schach Live</title>
 </head>
 <body>
+
     <div class="game-container">
+        
         <div class="board-section">
-            <div class="info-bar">
-                <h2 id="status-display">Warte auf Verbindung...</h2>
-                <div id="turn-indicator"></div>
-            </div>
+            <h2 id="status-display">Weiß am Zug</h2>
             <div id="chess-board"></div>
+            
             <div class="control-row">
-                <button id="undoBtn" title="Letzten Zug rückgängig machen">↩ Rückgängig</button>
-                <button id="resetBtn" title="Spiel komplett neu starten">🆕 Neues Spiel</button>
-                <button id="resignBtn" title="Das Spiel aufgeben">🚩 Aufgeben</button>
+                <button id="undoBtn">↩️ Rückgängig</button>
+                <button id="resetBtn">🆕 Neues Spiel</button>
+                <button id="resignBtn">🚩 Aufgeben</button>
             </div>
         </div>
 
         <div class="sidebar">
-            <div class="glass-panel profile-section">
-                <strong>👤 Spieler-Profil</strong>
-                <input type="text" id="playerName" placeholder="Dein Name..." maxlength="15">
-                <div class="server-status">
-                    <span id="user-counter">Online: 0</span>
-                    <span id="ping-indicator">● Live</span>
+            
+            <div class="glass-panel">
+                <div class="user-info">
+                    <span>👤 <strong>Spieler-Profil</strong></span>
+                    <input type="text" id="playerName" placeholder="Dein Name...">
                 </div>
+                <div id="user-counter">Online: 1 ● Live</div>
             </div>
 
-            <div class="glass-panel mode-section">
-                <strong>🎮 Spielmodus</strong>
-                <select id="gameMode">
-                    <option value="bot">🤖 Gegen den Bot (Smart)</option>
-                    <option value="online">🌐 Online Multiplayer (Raum ID)</option>
-                    <option value="random">🎲 Zufälliger Gegner (Suche)</option>
-                    <option value="local">👥 Lokal (2 Spieler am Gerät)</option>
-                    <option value="global_chat">💬 Welt-Chat (Nur Chat)</option>
-                </select>
-                <div class="input-group" id="room-input-group">
+            <div class="glass-panel">
+                <div class="mode-select">
+                    <span>🎮 <strong>Spielmodus</strong></span>
+                    <select id="gameMode">
+                        <option value="local">Lokal (2 Spieler am Gerät)</option>
+                        <option value="bot">Gegen den Bot (Smart)</option>
+                        <option value="random">Zufälliger Gegner (Suche)</option>
+                        <option value="online">Online (Privat)</option>
+                    </select>
+                </div>
+                <div class="room-controls">
                     <input type="text" id="roomID" placeholder="Raum ID eingeben">
                     <button id="connectMP">Beitreten</button>
                 </div>
@@ -48,23 +48,27 @@
 
             <div id="chat-container">
                 <div id="chat-messages"></div>
-                <div id="emoji-bar">
-                    <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
-                    <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
-                    <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
-                </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Nachricht schreiben..." autocomplete="off">
-                    <button id="send-chat">Senden</button>
+                    <div class="emoji-bar">
+                        <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
+                        <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
+                        <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="text" id="chat-input" placeholder="Nachricht schreiben...">
+                        <button id="send-chat">Senden</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="glass-panel leaderboard">
-                <strong>🏆 Beste Spieler</strong>
-                <div id="leaderboard-list">Lade Statistiken...</div>
+            <div class="glass-panel">
+                <span>🏆 <strong>Beste Spieler</strong></span>
+                <div id="leaderboard-list">
+                    </div>
             </div>
         </div>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
