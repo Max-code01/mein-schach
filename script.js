@@ -28,18 +28,26 @@ let board, turn = "white", selected = null, myColor = "white", onlineRoom = null
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. ELO POPUP FUNKTION ---
-function showEloUpdate(change, newElo) {
-    const color = change >= 0 ? "#4CAF50" : "#F44336";
-    const sign = change >= 0 ? "+" : "";
-    const eloMsg = document.createElement("div");
-    eloMsg.style = `position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #262421; color: white; padding: 20px; border-radius: 10px; border: 2px solid ${color}; z-index: 10000; text-align: center; font-family: sans-serif; box-shadow: 0 0 20px rgba(0,0,0,0.5);`;
-    eloMsg.innerHTML = `<h2 style="margin:0; color:${color}">${sign}${change} Elo</h2><p style="margin:5px 0 0 0">Neu: <strong>${newElo}</strong></p>`;
-    document.body.appendChild(eloMsg);
-    setTimeout(() => { eloMsg.remove(); }, 4000);
+// --- 2. CHAT & SYSTEM NACHRICHTEN (Wie in Video 1) ---
+function addChat(sender, text, type) {
+    const m = document.createElement("div");
+    m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
+    // Systemnachrichten bekommen ein Icon
+    const prefix = type === "system" ? "⚙️ " : `<strong>${sender}:</strong> `;
+    m.innerHTML = prefix + text;
+    chatMessages.appendChild(m);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// --- 3. LOGIK (REGELN, SCHACH, MATT) ---
+// Emoji-Logik (Repariert)
+document.querySelectorAll('.emoji-btn').forEach(btn => {
+    btn.onclick = () => {
+        chatInput.value += btn.textContent;
+        chatInput.focus();
+    };
+});
+
+// --- 3. LOGIK (SCHACH & MATT) ---
 function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
 
 function findKing(c) {
@@ -95,30 +103,41 @@ function checkGameOver() {
         if(board[r][c] && isOwn(board[r][c])) 
             for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) 
                 if(canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) moves++;
+    
     if(moves === 0) {
         const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
-            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', playerName: winner === "Weiß" ? "Weiß" : getMyName() }));
-        } else { statusEl.textContent = "PATT!"; }
+            addChat("System", `Das Spiel ist beendet. ${winner} hat gewonnen!`, "system");
+            if(socket.readyState === 1 && myColor !== "spectator") {
+                socket.send(JSON.stringify({ type: 'win', playerName: winner === "Weiß" ? "Weiß" : getMyName() }));
+            }
+        } else { 
+            statusEl.textContent = "PATT!"; 
+            addChat("System", "Unentschieden durch Patt.", "system");
+        }
         return true;
     }
     return false;
 }
 
-// --- 4. AKTIONEN & BOT ---
+// --- 4. SPIELFUNKTIONEN ---
 function doMove(fr, fc, tr, tc, emit = true) {
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
+    
     if (emit && socket.readyState === 1 && gameModeSelect.value !== "local") {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
     }
+    
     turn = (turn === "white" ? "black" : "white");
     const k = findKing(turn), inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
+    
     if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
+    
     const isGameOver = checkGameOver();
     if(!isGameOver) {
         statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
@@ -152,28 +171,34 @@ function draw() {
     });
 }
 
-// --- 5. SERVER EVENTS (CHAT, ELO, REMIS) ---
+// --- 5. SERVER EVENTS ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
         case 'join':
             onlineRoom = d.room; myColor = d.color || "white";
-            if(myColor === "black") boardEl.classList.add("flipped");
-            else boardEl.classList.remove("flipped");
-            addChat("System", d.systemMsg || `Verbunden mit Raum ${d.room}`, "system");
+            boardEl.classList.toggle("flipped", myColor === "black");
+            addChat("System", d.systemMsg || `Raum ${d.room} beigetreten.`, "system");
             resetGame();
             break;
         case 'move': doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false); break;
         case 'chat': addChat(d.sender, d.text, "other"); break;
-        case 'elo_update': showEloUpdate(d.change, d.newElo); break;
+        case 'elo_update': 
+            const popup = document.createElement("div");
+            popup.className = "elo-popup";
+            popup.innerHTML = `<h3>Elo Update</h3><p>${d.change >= 0 ? "+" : ""}${d.change} Punkte</p><p>Neu: ${d.newElo}</p>`;
+            document.body.appendChild(popup);
+            setTimeout(() => popup.remove(), 3000);
+            break;
         case 'draw_offer': 
             if(confirm(`${d.sender} bietet Remis an. Annehmen?`)) {
                 socket.send(JSON.stringify({ type: 'draw_accept', room: onlineRoom }));
+                addChat("System", "Remis angenommen.", "system");
                 resetGame();
             }
             break;
-        case 'draw_accept': addChat("System", "Remis angenommen.", "system"); resetGame(); break;
-        case 'resign': addChat("System", "Gegner hat aufgegeben.", "system"); resetGame(); break;
+        case 'draw_accept': addChat("System", "Gegner hat Remis angenommen.", "system"); resetGame(); break;
+        case 'resign': addChat("System", "Gegner hat aufgegeben. Du gewinnst!", "system"); resetGame(); break;
         case 'user-count': document.getElementById("user-counter").textContent = "Online: " + d.count; break;
         case 'leaderboard':
             document.getElementById("leaderboard-list").innerHTML = d.list.map((p, i) => 
@@ -182,32 +207,36 @@ socket.onmessage = (e) => {
     }
 };
 
-// --- CHAT & UI ---
-function addChat(sender, text, type) {
-    const m = document.createElement("div");
-    m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
-    m.innerHTML = `<strong>${sender}:</strong> ${text}`;
-    chatMessages.appendChild(m);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
+// --- BUTTONS & MODI ---
+gameModeSelect.onchange = () => {
+    if(gameModeSelect.value === "random") {
+        addChat("System", "Suche läuft... bitte warten.", "system");
+        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
+    }
+};
 
 document.getElementById("send-chat").onclick = () => {
     const t = chatInput.value;
     if(t) { socket.send(JSON.stringify({type:'chat', text:t, sender:getMyName(), room:onlineRoom})); addChat("Ich", t, "me"); chatInput.value=""; }
 };
 
-document.getElementById("drawBtn").onclick = () => {
-    socket.send(JSON.stringify({ type: 'draw_offer', sender: getMyName(), room: onlineRoom }));
-    addChat("System", "Remis angeboten.", "system");
+document.getElementById("connectMP").onclick = () => {
+    const r = document.getElementById("roomID").value;
+    if(r) socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
 };
 
 document.getElementById("watchBtn").onclick = () => {
-    const r = document.getElementById("roomID").value || "global";
-    socket.send(JSON.stringify({ type: 'join_spectator', room: r, name: getMyName() }));
+    const r = document.getElementById("roomID").value;
+    if(r) socket.send(JSON.stringify({ type: 'join_spectator', room: r, name: getMyName() }));
 };
 
-document.getElementById("connectMP").onclick = () => {
-    socket.send(JSON.stringify({ type: 'join', room: document.getElementById("roomID").value, name: getMyName() }));
+document.getElementById("resetBtn").onclick = resetGame;
+document.getElementById("resignBtn").onclick = () => {
+    if(confirm("Willst du wirklich aufgeben?")) {
+        socket.send(JSON.stringify({ type: 'resign', room: onlineRoom }));
+        addChat("System", "Du hast aufgegeben.", "system");
+        resetGame();
+    }
 };
 
 function resetGame() {
@@ -218,11 +247,7 @@ function resetGame() {
         ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
     ];
     turn = "white"; selected = null; draw();
+    statusEl.textContent = "Weiß am Zug";
 }
-
-stockfishWorker.onmessage = (e) => {
-    const isGameOver = statusEl.textContent.includes("MATT");
-    if(e.data && turn === "black" && !isGameOver) setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600);
-};
 
 resetGame();
