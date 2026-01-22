@@ -1,146 +1,181 @@
 const WebSocket = require('ws');
 const http = require('http');
-const fs = require('fs');
 
-const server = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("Schach-Server läuft aktiv!");
-});
-
+// Port-Konfiguration für Deployment (z.B. Render) oder lokal
+const PORT = process.env.PORT || 8080;
+const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
-// --- LEADERBOARD & ELO SETUP ---
-const LB_FILE = './leaderboard.json';
-const K_FACTOR = 32;
-let leaderboard = {};
+// Daten-Speicher (Im echten Betrieb wäre eine Datenbank besser, hier im RAM)
+let players = {}; // Speichert Name, Elo, Wins pro Verbindung
+let rooms = {};   // Speichert Spielzustände pro Raum
+let waitingPlayer = null; // Für die Zufallssuche
 
-if (fs.existsSync(LB_FILE)) {
-    try {
-        leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8'));
-    } catch (e) {
-        leaderboard = {};
-    }
-}
-
-function saveLeaderboard() {
-    fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
-}
-
-function ensureElo(name) {
-    if (!leaderboard[name]) {
-        leaderboard[name] = { wins: 0, elo: 1200 };
-    } else if (typeof leaderboard[name] === 'number') {
-        leaderboard[name] = { wins: leaderboard[name], elo: 1200 };
-    }
-}
-
-let waitingPlayer = null;
+// Standard-Elo-Wert
+const DEFAULT_ELO = 1000;
 
 wss.on('connection', (ws) => {
-    // Sende Leaderboard beim Connect
-    sendLeaderboard(ws);
-    broadcastUserCount();
+    // Initialisiere Spieler-Daten für diese Verbindung
+    ws.id = Math.random().toString(36).substring(7);
+    players[ws.id] = { 
+        name: "Gast", 
+        elo: DEFAULT_ELO, 
+        wins: 0, 
+        ws: ws, 
+        room: null 
+    };
+
+    console.log(`Neuer Spieler verbunden: ${ws.id}`);
 
     ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
+        const data = JSON.parse(message);
 
-            // 1. JOIN LOGIK (Spieler & Zuschauer)
-            if (data.type === 'join') {
-                ws.room = data.room;
-                ws.playerName = data.name;
-                ws.isSpectator = false;
-                ws.send(JSON.stringify({ type: 'join', room: data.room }));
-            }
+        switch (data.type) {
+            case 'join':
+                handleJoin(ws, data);
+                break;
             
-            if (data.type === 'join_spectator') {
-                ws.room = data.room;
-                ws.playerName = data.name;
-                ws.isSpectator = true;
-                ws.send(JSON.stringify({ type: 'join', room: data.room, color: 'spectator', systemMsg: "Zuschauer-Modus aktiv." }));
-            }
+            case 'find_random':
+                handleRandomSearch(ws, data);
+                break;
 
-            // 2. MATCHMAKING
-            if (data.type === 'find_random') {
-                if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
-                    const roomID = "random_" + Math.random();
-                    waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden!" }));
-                    ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden!" }));
-                    waitingPlayer.room = roomID; ws.room = roomID;
-                    waitingPlayer = null;
-                } else {
-                    waitingPlayer = ws;
-                }
-            }
+            case 'move':
+                handleMove(ws, data);
+                break;
 
-            // 3. ELO & SIEG LOGIK
-            if (data.type === 'win') {
-                const winnerName = data.playerName;
-                const loserName = data.loserName || "Unbekannt";
-                
-                ensureElo(winnerName);
-                ensureElo(loserName);
+            case 'chat':
+                broadcastToRoom(data.room, {
+                    type: 'chat',
+                    sender: data.sender,
+                    text: data.text
+                }, ws);
+                break;
 
-                const oldWinElo = leaderboard[winnerName].elo;
-                const oldLoseElo = leaderboard[loserName].elo;
+            case 'win':
+                handleWin(ws, data);
+                break;
 
-                const ea = 1 / (1 + Math.pow(10, (oldLoseElo - oldWinElo) / 400));
-                const winChange = Math.round(K_FACTOR * (1 - ea));
-                const lossChange = Math.round(K_FACTOR * (0 - (1 - ea)));
+            case 'resign':
+                handleResign(ws, data);
+                break;
 
-                leaderboard[winnerName].elo += winChange;
-                leaderboard[loserName].elo += lossChange;
-                leaderboard[winnerName].wins++;
+            case 'draw_offer':
+                broadcastToRoom(data.room, { type: 'chat', sender: 'System', text: 'Gegner bietet Remis an.' }, ws);
+                break;
+        }
 
-                saveLeaderboard();
-                broadcastLeaderboard();
-
-                // Elo-Updates an die Spieler senden
-                wss.clients.forEach(client => {
-                    if (client.playerName === winnerName) 
-                        client.send(JSON.stringify({ type: 'elo_update', change: winChange, newElo: leaderboard[winnerName].elo }));
-                    if (client.playerName === loserName) 
-                        client.send(JSON.stringify({ type: 'elo_update', change: lossChange, newElo: leaderboard[loserName].elo }));
-                });
-            }
-
-            // 4. WEITERLEITUNG (Chat, Moves, Remis, Resign)
-            if (['chat', 'move', 'draw_offer', 'draw_accept', 'resign'].includes(data.type)) {
-                wss.clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
-                        client.send(JSON.stringify(data));
-                    }
-                });
-            }
-
-        } catch (e) { console.error(e); }
+        // Sende bei jeder Aktion das aktuelle Leaderboard und User-Count
+        updateGlobalStats();
     });
 
-    ws.on('close', () => { 
-        if(waitingPlayer === ws) waitingPlayer = null; 
-        broadcastUserCount();
+    ws.on('close', () => {
+        if (waitingPlayer === ws) waitingPlayer = null;
+        delete players[ws.id];
+        updateGlobalStats();
+        console.log(`Spieler getrennt: ${ws.id}`);
     });
 });
 
-function broadcastLeaderboard() {
-    const list = Object.entries(leaderboard)
-        .map(([name, d]) => ({ name, wins: d.wins, elo: d.elo }))
-        .sort((a, b) => b.elo - a.elo).slice(0, 5);
-    const msg = JSON.stringify({ type: 'leaderboard', list });
-    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+// FUNKTIONEN
+
+function handleJoin(ws, data) {
+    const roomID = data.room;
+    ws.playerName = data.name || "Gast";
+    players[ws.id].name = ws.playerName;
+    players[ws.id].room = roomID;
+
+    if (!rooms[roomID]) {
+        rooms[roomID] = { white: ws, black: null };
+        ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'white' }));
+    } else if (!rooms[roomID].black) {
+        rooms[roomID].black = ws;
+        ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black' }));
+        // Benachrichtige Weiß, dass Schwarz da ist
+        rooms[roomID].white.send(JSON.stringify({ type: 'chat', sender: 'System', text: 'Gegner ist beigetreten!' }));
+    } else {
+        // Zuschauer-Modus
+        ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'spectator' }));
+    }
 }
 
-function sendLeaderboard(ws) {
-    const list = Object.entries(leaderboard)
-        .map(([name, d]) => ({ name, wins: d.wins, elo: d.elo }))
-        .sort((a, b) => b.elo - a.elo).slice(0, 5);
-    ws.send(JSON.stringify({ type: 'leaderboard', list }));
+function handleRandomSearch(ws, data) {
+    ws.playerName = data.name || "Gast";
+    players[ws.id].name = ws.playerName;
+
+    if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
+        const roomID = "random_" + Math.random().toString(36).substring(7);
+        rooms[roomID] = { white: waitingPlayer, black: ws };
+        
+        waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white' }));
+        ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black' }));
+        
+        waitingPlayer = null;
+    } else {
+        waitingPlayer = ws;
+        ws.send(JSON.stringify({ type: 'chat', sender: 'System', text: 'Suche läuft... Warte auf Gegner.' }));
+    }
 }
 
-function broadcastUserCount() {
-    const msg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
-    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+function handleMove(ws, data) {
+    broadcastToRoom(data.room, {
+        type: 'move',
+        move: data.move
+    }, ws);
 }
 
-const PORT = process.env.PORT || 8080;
-server.listen(PORT);
+function handleWin(ws, data) {
+    const p = players[ws.id];
+    p.wins += 1;
+    const eloGain = 25;
+    p.elo += eloGain;
+
+    ws.send(JSON.stringify({ 
+        type: 'elo_update', 
+        change: eloGain, 
+        newElo: p.elo 
+    }));
+    updateGlobalStats();
+}
+
+function handleResign(ws, data) {
+    broadcastToRoom(data.room, { 
+        type: 'chat', 
+        sender: 'System', 
+        text: 'Gegner hat aufgegeben!' 
+    }, ws);
+}
+
+function broadcastToRoom(roomID, message, senderWs) {
+    if (rooms[roomID]) {
+        Object.values(rooms[roomID]).forEach(client => {
+            if (client && client !== senderWs && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(message));
+            }
+        });
+    }
+}
+
+function updateGlobalStats() {
+    const allPlayers = Object.values(players);
+    const leaderboard = allPlayers
+        .map(p => ({ name: p.name, elo: p.elo, wins: p.wins }))
+        .sort((a, b) => b.elo - a.elo)
+        .slice(0, 10);
+
+    const statsUpdate = JSON.stringify({
+        type: 'leaderboard',
+        list: leaderboard,
+        count: allPlayers.length
+    });
+
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(statsUpdate);
+            client.send(JSON.stringify({ type: 'user-count', count: allPlayers.length }));
+        }
+    });
+}
+
+server.listen(PORT, () => {
+    console.log(`Server läuft auf Port ${PORT}`);
+});
