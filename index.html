@@ -2,8 +2,9 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mein Schach-Spiel</title>
     <link rel="stylesheet" href="style.css">
-    <title>Schach Live</title>
 </head>
 <body>
 
@@ -11,8 +12,10 @@
         
         <div class="board-section">
             <h2 id="status-display">Weiß am Zug</h2>
-            <div id="chess-board"></div>
             
+            <div id="chess-board">
+                </div>
+
             <div class="control-row">
                 <button id="undoBtn">↩️ Rückgängig</button>
                 <button id="resetBtn">🆕 Neues Spiel</button>
@@ -23,39 +26,40 @@
         <div class="sidebar">
             
             <div class="glass-panel">
-                <div class="user-info">
+                <div style="display: flex; align-items: center; gap: 10px;">
                     <span>👤 <strong>Spieler-Profil</strong></span>
                     <input type="text" id="playerName" placeholder="Dein Name...">
                 </div>
-                <div id="user-counter">Online: 1 ● Live</div>
+                <div id="user-counter" style="margin-top: 5px;">Online: 1 ● Live</div>
             </div>
 
             <div class="glass-panel">
-                <div class="mode-select">
+                <div style="margin-bottom: 10px;">
                     <span>🎮 <strong>Spielmodus</strong></span>
-                    <select id="gameMode">
+                    <select id="gameMode" style="width: 100%; margin-top: 5px;">
                         <option value="local">Lokal (2 Spieler am Gerät)</option>
                         <option value="bot">Gegen den Bot (Smart)</option>
                         <option value="random">Zufälliger Gegner (Suche)</option>
                         <option value="online">Online (Privat)</option>
                     </select>
                 </div>
-                <div class="room-controls">
-                    <input type="text" id="roomID" placeholder="Raum ID eingeben">
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="roomID" placeholder="Raum ID" style="flex-grow: 1;">
                     <button id="connectMP">Beitreten</button>
                 </div>
             </div>
 
             <div id="chat-container">
                 <div id="chat-messages"></div>
-                <div class="chat-input-area">
-                    <div class="emoji-bar">
-                        <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
-                        <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
-                        <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
+                
+                <div style="padding: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div class="emoji-bar" style="margin-bottom: 5px; cursor: pointer;">
+                        <span class="emoji-btn">😊</span> <span class="emoji-btn">😂</span>
+                        <span class="emoji-btn">🔥</span> <span class="emoji-btn">👍</span>
+                        <span class="emoji-btn">♟️</span> <span class="emoji-btn">⚔️</span>
                     </div>
                     <div style="display: flex; gap: 5px;">
-                        <input type="text" id="chat-input" placeholder="Nachricht schreiben...">
+                        <input type="text" id="chat-input" placeholder="Nachricht..." style="flex-grow: 1;">
                         <button id="send-chat">Senden</button>
                     </div>
                 </div>
@@ -63,12 +67,10 @@
 
             <div class="glass-panel">
                 <span>🏆 <strong>Beste Spieler</strong></span>
-                <div id="leaderboard-list">
+                <div id="leaderboard-list" style="margin-top: 10px;">
                     </div>
             </div>
-        </div>
-    </div>
 
-    <script src="script.js"></script>
+        </div> </div> <script src="script.js"></script>
 </body>
 </html>
