@@ -5,7 +5,7 @@ const chatInput = document.getElementById("chat-input");
 const gameModeSelect = document.getElementById("gameMode");
 const nameInput = document.getElementById("playerName");
 
-// --- 1. KONFIGURATION ---
+// --- 1. KONFIGURATION & SETUP ---
 let stockfishWorker = new Worker('engineWorker.js'); 
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
@@ -29,7 +29,7 @@ let myColor = "white", onlineRoom = null;
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & SYSTEM ---
+// --- 2. CHAT & SYSTEMNACHRICHTEN ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -37,10 +37,6 @@ function addChat(sender, text, type) {
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
-
-document.querySelectorAll('.emoji-btn').forEach(b => {
-    b.onclick = () => { chatInput.value += b.textContent; chatInput.focus(); };
-});
 
 function sendMsg() {
     const t = chatInput.value.trim();
@@ -71,48 +67,25 @@ socket.onmessage = (e) => {
                 doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false);
             }
             break;
-        case 'chat':
-            addChat(d.sender, d.text, "other");
-            break;
-        case 'user-count':
-            document.getElementById("user-counter").textContent = "Online: " + d.count;
-            break;
+        case 'chat': addChat(d.sender, d.text, "other"); break;
+        case 'user-count': document.getElementById("user-counter").textContent = "Online: " + d.count; break;
         case 'leaderboard':
             document.getElementById("leaderboard-list").innerHTML = d.list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
             break;
     }
 };
 
-gameModeSelect.onchange = () => {
-    if (gameModeSelect.value === "random") {
-        addChat("System", "Suche läuft... 🎲", "system");
-        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
-    } else {
-        boardEl.classList.remove("flipped");
-        myColor = "white";
-    }
-};
-
-document.getElementById("connectMP").onclick = () => {
-    const r = document.getElementById("roomID").value || "global";
-    socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
-};
-
-// --- 4. VERBESSERTE SCHACH LOGIK ---
-function resetGame() {
-    board = [
-        ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
-        ["","","","","","","",""], ["","","","","","","",""],
-        ["","","","","","","",""], ["","","","","","","",""],
-        ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
-    ];
-    turn = "white"; selected = null; history = [];
-    statusEl.textContent = "Weiß am Zug";
-    draw();
-}
+// --- 4. NEUE REGEL-LOGIK (SCHACH & MATT) ---
 
 function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
 
+function findKing(c) {
+    const target = (c === "white" ? "K" : "k");
+    for(let r=0; r<8; r++) for(let cIdx=0; cIdx<8; cIdx++) if(board[r][cIdx] === target) return {r, c: cIdx};
+    return null;
+}
+
+// Grundlegende Bewegungslogik
 function canMoveLogic(fr, fc, tr, tc, b = board) {
     const p = b[fr][fc]; if(!p) return false;
     const target = b[tr][tc]; if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
@@ -140,11 +113,89 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
     return false;
 }
 
+// Prüft, ob ein Feld von einer Farbe angegriffen wird
+function isAttacked(tr, tc, attackerColor) {
+    for(let r=0; r<8; r++) {
+        for(let c=0; c<8; c++) {
+            if(board[r][c] && isOwn(board[r][c], attackerColor)) {
+                if(canMoveLogic(r, c, tr, tc)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Verhindert illegale Züge (König darf nicht im Schach stehen bleiben)
+function isSafeMove(fr, fc, tr, tc) {
+    const tempTarget = board[tr][tc];
+    const tempSource = board[fr][fc];
+    board[tr][tc] = tempSource;
+    board[fr][fc] = "";
+    const k = findKing(turn);
+    const safe = k ? !isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : true;
+    board[fr][fc] = tempSource;
+    board[tr][tc] = tempTarget;
+    return safe;
+}
+
+// Prüft nach jedem Zug auf Ende
+function checkGameOver() {
+    let hasMoves = false;
+    for(let r=0; r<8; r++) {
+        for(let c=0; c<8; c++) {
+            if(board[r][c] && isOwn(board[r][c], turn)) {
+                for(let tr=0; tr<8; tr++) {
+                    for(let tc=0; tc<8; tc++) {
+                        if(canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) {
+                            hasMoves = true; break;
+                        }
+                    }
+                    if(hasMoves) break;
+                }
+            }
+            if(hasMoves) break;
+        }
+    }
+
+    if(!hasMoves) {
+        const k = findKing(turn);
+        const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+        if(inCheck) {
+            const winner = turn === "white" ? "Schwarz" : "Weiß";
+            statusEl.textContent = `MATT! ${winner} GEWINNT! 🏆`;
+            addChat("System", `Schachmatt! ${winner} hat gewonnen.`, "system");
+            // Sieg an Server senden (Leaderboard)
+            if(socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
+            }
+        } else {
+            statusEl.textContent = "PATT! Unentschieden.";
+            addChat("System", "Unentschieden durch Patt.", "system");
+        }
+        return true;
+    }
+    return false;
+}
+
+// --- 5. SPIEL-STEUERUNG ---
+
+function resetGame() {
+    board = [
+        ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
+        ["","","","","","","",""], ["","","","","","","",""],
+        ["","","","","","","",""], ["","","","","","","",""],
+        ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
+    ];
+    turn = "white"; selected = null; history = [];
+    statusEl.textContent = "Weiß am Zug";
+    draw();
+}
+
 function doMove(fr, fc, tr, tc, emit = true) {
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
-    // Beförderung (Standardmäßig zu Dame)
+    // Beförderung
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
@@ -153,11 +204,14 @@ function doMove(fr, fc, tr, tc, emit = true) {
     }
 
     turn = (turn === "white" ? "black" : "white");
+    const k = findKing(turn);
+    const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
     
-    // Sounds & Status
-    isCap ? sounds.cap.play() : sounds.move.play();
-    statusEl.textContent = (turn === "white" ? "Weiß am Zug" : "Schwarz am Zug");
+    if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
     
+    if(!checkGameOver()) {
+        statusEl.textContent = (turn === "white" ? "Weiß am Zug" : "Schwarz am Zug");
+    }
     draw();
 
     if(turn === "black" && gameModeSelect.value === "bot") {
@@ -167,11 +221,16 @@ function doMove(fr, fc, tr, tc, emit = true) {
 
 function draw() {
     boardEl.innerHTML = "";
+    const k = findKing(turn);
+    const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+
     board.forEach((row, r) => {
         row.forEach((p, c) => {
             const d = document.createElement("div");
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
+            if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
             
             if(p) {
                 const img = document.createElement("img"); img.src = PIECES[p];
@@ -179,12 +238,11 @@ function draw() {
             }
             
             d.onclick = () => {
-                // Farbsperre im Online-Modus
                 const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
                 if(isOnline && turn !== myColor) return;
 
                 if(selected) {
-                    if(canMoveLogic(selected.r, selected.c, r, c)) {
+                    if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
                         doMove(selected.r, selected.c, r, c);
                         selected = null;
                     } else {
@@ -201,8 +259,6 @@ function draw() {
     });
 }
 
-// Controls
-document.getElementById("undoBtn").onclick = () => { /* Alte Undo Logik bleibt hier */ };
 document.getElementById("resetBtn").onclick = resetGame;
 document.getElementById("resignBtn").onclick = () => {
     addChat("System", "Spiel aufgegeben.", "system");
