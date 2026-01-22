@@ -3,69 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schach Pro - Ultimate Layout</title>
+    <title>Chess Extreme - Ultimate Version</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="main-layout">
-        <div id="left-sidebar" class="card">
-            <h3>💬 Chat & System</h3>
-            <div id="chat-messages"></div>
-            <div class="emoji-bar">
-                <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
-                <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
-                <span class="emoji-btn">👎</span><span class="emoji-btn">👋</span>
-                <span class="emoji-btn">❌</span>
+    <div class="game-container">
+        <div class="board-section">
+            <div class="info-bar">
+                <h2 id="status-display">Warte auf Verbindung...</h2>
+                <div id="turn-indicator"></div>
             </div>
-            <div class="chat-input-row">
-                <input type="text" id="chat-input" placeholder="Nachricht...">
-                <button id="send-chat">Senden</button>
-            </div>
-        </div>
-
-        <div id="center-area">
-            <h2 id="status-display">Weiß am Zug</h2>
             <div id="chess-board"></div>
-            <div class="main-controls">
-                <button id="undoBtn" class="btn-gray">↩️ Rückgängig</button>
-                <button id="resetBtn" class="btn-blue">🆕 Neues Spiel</button>
-                <button id="resignBtn" class="btn-red">❗ Aufgeben</button>
+            <div class="control-row">
+                <button id="undoBtn" title="Letzten Zug rückgängig machen">↩ Rückgängig</button>
+                <button id="resetBtn" title="Spiel komplett neu starten">🆕 Neues Spiel</button>
+                <button id="resignBtn" title="Das Spiel aufgeben">🚩 Aufgeben</button>
             </div>
         </div>
 
-        <div id="right-sidebar">
-            <div class="card">
-                <h3>👤 Profil & Status</h3>
-                <div class="input-group">
-                    <span>Name:</span>
-                    <input type="text" id="playerName" placeholder="Dein Name...">
+        <div class="sidebar">
+            <div class="glass-panel profile-section">
+                <strong>👤 Spieler-Profil</strong>
+                <input type="text" id="playerName" placeholder="Dein Name..." maxlength="15">
+                <div class="server-status">
+                    <span id="user-counter">Online: 0</span>
+                    <span id="ping-indicator">● Live</span>
                 </div>
-                <div class="online-status">Online: <span id="user-counter">0</span> <span class="live-indicator">🔴 Live</span></div>
-                
-                <h3 style="margin-top:20px;">🎮 Modus wählen</h3>
-                <select id="gameMode">
-                    <option value="random">🔍 Zufälliger Gegner (Suche)</option>
-                    <option value="local">👥 Lokal (2 Spieler am Gerät)</option>
-                    <option value="bot">🤖 Gegen den Bot (Smart)</option>
-                    <option value="online">🏠 Online (Privat)</option>
-                    <option value="white_chat">⚪ Weiß-Chat (Beobachter)</option>
-                    <option value="black_chat">⚫ Schwarz-Chat (Beobachter)</option>
-                </select>
+            </div>
 
-                <div class="room-box">
-                    <input type="text" id="roomID" placeholder="Raum ID">
+            <div class="glass-panel mode-section">
+                <strong>🎮 Spielmodus</strong>
+                <select id="gameMode">
+                    <option value="bot">🤖 Gegen den Bot (Smart)</option>
+                    <option value="online">🌐 Online Multiplayer (Raum ID)</option>
+                    <option value="random">🎲 Zufälliger Gegner (Suche)</option>
+                    <option value="local">👥 Lokal (2 Spieler am Gerät)</option>
+                    <option value="global_chat">💬 Welt-Chat (Nur Chat)</option>
+                </select>
+                <div class="input-group" id="room-input-group">
+                    <input type="text" id="roomID" placeholder="Raum ID eingeben">
                     <button id="connectMP">Beitreten</button>
                 </div>
-                
-                <div class="extra-btns">
-                    <button id="watchBtn">👁️ Zuschauen</button>
-                    <button id="drawBtn">🤝 Remis</button>
+            </div>
+
+            <div id="chat-container">
+                <div id="chat-messages"></div>
+                <div id="emoji-bar">
+                    <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
+                    <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
+                    <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Nachricht schreiben..." autocomplete="off">
+                    <button id="send-chat">Senden</button>
                 </div>
             </div>
 
-            <div class="card leaderboard-card">
-                <h3>🏆 Beste Spieler</h3>
-                <div id="leaderboard-list"></div>
+            <div class="glass-panel leaderboard">
+                <strong>🏆 Beste Spieler</strong>
+                <div id="leaderboard-list">Lade Statistiken...</div>
             </div>
         </div>
     </div>
