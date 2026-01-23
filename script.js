@@ -27,9 +27,15 @@ const PIECES = {
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
 
+// NEU: Status für die Rochade (Castling)
+let hasMoved = {
+    whiteK: false, whiteR1: false, whiteR8: false,
+    blackK: false, blackR1: false, blackR8: false
+};
+
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & SYSTEM (VOLLSTÄNDIG) ---
+// --- 2. CHAT & SYSTEM (ERHALTEN) ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -52,7 +58,7 @@ function sendMsg() {
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
-// --- 3. SERVER EVENT HANDLING (VOLLSTÄNDIG) ---
+// --- 3. SERVER EVENT HANDLING (ERHALTEN) ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
@@ -98,7 +104,7 @@ document.getElementById("connectMP").onclick = () => {
     socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
 };
 
-// --- 4. REGELN & SCHACH-LOGIK ---
+// --- 4. REGELN & SCHACH-LOGIK (ERWEITERT UM ROCHADE & SCHUTZ) ---
 
 function findKing(c) {
     const target = (c === "white" ? "K" : "k");
@@ -118,7 +124,7 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
         if(fc === tc && b[tr][tc] === "") {
             if(tr - fr === dir) return true;
             if(tr - fr === 2*dir && (fr === 1 || fr === 6) && b[fr+dir][fc] === "") return true;
-        } else if(dc === 1 && tr - fr === dir && b[tr][tc] !== "") return true;
+        } else if(Math.abs(tc - fc) === 1 && tr - fr === dir && b[tr][tc] !== "") return true;
         return false;
     }
     const pathClear = () => {
@@ -131,7 +137,29 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
     if(type === 'b') return dr === dc && pathClear();
     if(type === 'q') return (fr === tr || fc === tc || dr === dc) && pathClear();
     if(type === 'n') return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
-    if(type === 'k') return dr <= 1 && dc <= 1;
+    
+    if(type === 'k') {
+        if(dr <= 1 && dc <= 1) return true;
+        
+        // NEU: Rochade Logik
+        if(dr === 0 && dc === 2) {
+            const isWhite = p === 'K';
+            if(isWhite && hasMoved.whiteK) return false;
+            if(!isWhite && hasMoved.blackK) return false;
+            
+            const opponent = isWhite ? "black" : "white";
+            if(isAttacked(fr, fc, opponent)) return false; // Darf nicht im Schach starten
+
+            if(tc === 6) { // Kurz
+                const rMoved = isWhite ? hasMoved.whiteR8 : hasMoved.blackR8;
+                return !rMoved && b[fr][5] === "" && b[fr][6] === "" && !isAttacked(fr, 5, opponent);
+            }
+            if(tc === 2) { // Lang
+                const rMoved = isWhite ? hasMoved.whiteR1 : hasMoved.blackR1;
+                return !rMoved && b[fr][1] === "" && b[fr][2] === "" && b[fr][3] === "" && !isAttacked(fr, 3, opponent);
+            }
+        }
+    }
     return false;
 }
 
@@ -145,7 +173,8 @@ function isSafeMove(fr, fc, tr, tc) {
     const p = board[fr][fc], t = board[tr][tc];
     board[tr][tc] = p; board[fr][fc] = "";
     const k = findKing(turn);
-    const safe = k ? !isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : true;
+    // Ein Zug ist nur sicher, wenn danach kein König geschlagen werden kann (kein Schach)
+    const safe = k ? !isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
     board[fr][fc] = p; board[tr][tc] = t;
     return safe;
 }
@@ -158,7 +187,9 @@ function checkGameOver() {
                 if(canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) moves++;
 
     if(moves === 0) {
-        const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+        const k = findKing(turn);
+        if(!k) return true;
+        const inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
@@ -169,7 +200,7 @@ function checkGameOver() {
     return false;
 }
 
-// --- 5. SPIEL-STEUERUNG ---
+// --- 5. SPIEL-STEUERUNG (ERWEITERT UM UNDO & BOT-LEVELS) ---
 
 function resetGame() {
     board = [
@@ -178,24 +209,42 @@ function resetGame() {
         ["","","","","","","",""], ["","","","","","","",""],
         ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
     ];
+    hasMoved = { whiteK: false, whiteR1: false, whiteR8: false, blackK: false, blackR1: false, blackR8: false };
     turn = "white"; selected = null; history = [];
     statusEl.textContent = "Weiß am Zug";
     draw();
 }
 
 function doMove(fr, fc, tr, tc, emit = true) {
+    // NEU: Zustand für Undo speichern
+    history.push(JSON.stringify({ board: board.map(r => [...r]), turn, hasMoved: {...hasMoved} }));
+
+    const piece = board[fr][fc];
     const isCap = board[tr][tc] !== "";
-    board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
+
+    // NEU: Rochade Ausführung (Turm mitbewegen)
+    if(piece.toLowerCase() === 'k' && Math.abs(fc - tc) === 2) {
+        if(tc === 6) { board[fr][5] = board[fr][7]; board[fr][7] = ""; } // kurz
+        if(tc === 2) { board[fr][3] = board[fr][0]; board[fr][0] = ""; } // lang
+    }
+
+    // NEU: HasMoved Status aktualisieren
+    if(piece === 'K') hasMoved.whiteK = true; if(piece === 'k') hasMoved.blackK = true;
+    if(fr===7 && fc===0) hasMoved.whiteR1 = true; if(fr===7 && fc===7) hasMoved.whiteR8 = true;
+    if(fr===0 && fc===0) hasMoved.blackR1 = true; if(fr===0 && fc===7) hasMoved.blackR8 = true;
+
+    board[tr][tc] = piece; board[fr][fc] = "";
     
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    if (emit && socket.readyState === 1 && gameModeSelect.value !== "local") {
+    if (emit && socket.readyState === 1 && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
     }
 
     turn = (turn === "white" ? "black" : "white");
-    const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+    const k = findKing(turn);
+    const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
     
     if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
     
@@ -204,8 +253,9 @@ function doMove(fr, fc, tr, tc, emit = true) {
     }
     draw();
 
-    if(turn === "black" && gameModeSelect.value === "bot") {
-        stockfishWorker.postMessage({ board, turn: "black" });
+    // NEU: Trigger Bot mit Difficulty
+    if(turn === "black" && gameModeSelect.value.startsWith("bot")) {
+        stockfishWorker.postMessage({ board, turn: "black", difficulty: gameModeSelect.value });
     }
 }
 
@@ -248,7 +298,19 @@ function draw() {
     });
 }
 
-document.getElementById("undoBtn").onclick = () => { /* Undo Logik */ };
+// NEU: Vollständige Undo Logik
+document.getElementById("undoBtn").onclick = () => { 
+    if(history.length > 0) {
+        const last = JSON.parse(history.pop());
+        board = last.board;
+        turn = last.turn;
+        hasMoved = last.hasMoved;
+        selected = null;
+        draw();
+        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Undo)";
+    }
+};
+
 document.getElementById("resetBtn").onclick = resetGame;
 document.getElementById("resignBtn").onclick = () => {
     addChat("System", "Spiel aufgegeben.", "system");
