@@ -1,222 +1,524 @@
-// ==========================================
-// 1. INITIALISIERUNG & VARIABLEN
-// ==========================================
-var board = null;
-var game = new Chess();
-var currentRoom = null;
-var playerColor = 'white';
+const boardEl = document.getElementById("chess-board");
 
-// WICHTIG: Ersetze die URL durch deine echte Render-URL!
-const socket = new WebSocket('wss://dein-projekt-name.onrender.com');
+const statusEl = document.getElementById("status-display");
 
-// ==========================================
-// 2. SOUND-SYSTEM (Erzeugt Töne im Browser)
-// ==========================================
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const chatMessages = document.getElementById("chat-messages");
 
-function playSound(type) {
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    
-    if (type === 'move') {
-        oscillator.type = 'triangle';
-        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.1);
-    } else if (type === 'win') {
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); // Note C5
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.5);
-    }
-}
+const chatInput = document.getElementById("chat-input");
 
-// ==========================================
-// 3. WEBSOCKET-KOMMUNIKATION
-// ==========================================
-socket.onmessage = function(event) {
-    const data = JSON.parse(event.data);
+const gameModeSelect = document.getElementById("gameMode");
 
-    // Leaderboard empfangen und anzeigen
-    if (data.type === 'leaderboard') {
-        const list = document.getElementById('leaderboard-list');
-        if (list) {
-            list.innerHTML = '';
-            data.list.forEach((player, i) => {
-                let medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "";
-                list.innerHTML += `
-                    <div class="leaderboard-entry">
-                        <span class="rank">${i+1}.</span>
-                        <span class="name">${medal} ${player.name}</span>
-                        <span class="wins">${player.wins} 🏆</span>
-                    </div>`;
-            });
-        }
-    }
+const nameInput = document.getElementById("playerName");
 
-    // Einem Online-Spiel beitreten
-    if (data.type === 'join') {
-        currentRoom = data.room;
-        playerColor = data.color || 'white';
-        game.reset();
-        board.orientation(playerColor);
-        board.position('start');
-        
-        // Undo-Button optisch deaktivieren
-        document.getElementById('undoBtn').classList.add('disabled');
-        alert("Spiel gestartet! Deine Farbe: " + (playerColor === 'white' ? "Weiß" : "Schwarz"));
-    }
 
-    // Zug vom Gegner empfangen
-    if (data.type === 'move') {
-        game.move(data.move);
-        board.position(game.fen());
-        playSound('move');
-        checkGameOver();
-    }
 
-    // Chat-Nachricht empfangen
-    if (data.type === 'chat') {
-        const chatLog = document.getElementById('chat-log');
-        if (chatLog) {
-            chatLog.innerHTML += `<div><b>Gegner:</b> ${data.msg}</div>`;
-            chatLog.scrollTop = chatLog.scrollHeight;
-        }
-    }
+// --- 1. KONFIGURATION ---
 
-    // Online-User zählen
-    if (data.type === 'user-count') {
-        const countElem = document.getElementById('user-count');
-        if (countElem) countElem.innerText = "Online: " + data.count;
-    }
+let stockfishWorker = new Worker('engineWorker.js'); 
+
+const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
+
+
+
+const sounds = {
+
+    move: new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3'),
+
+    cap: new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/capture.mp3'),
+
+    check: new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-check.mp3')
+
 };
 
-// ==========================================
-// 4. SCHACH-LOGIK & BOARD-EVENTS
-// ==========================================
-function onDragStart(source, piece, position, orientation) {
-    if (game.game_over()) return false;
-    
-    // Im Online-Modus: Nur eigene Steine ziehen
-    if (currentRoom) {
-        if ((playerColor === 'white' && piece.search(/^b/) !== -1) ||
-            (playerColor === 'black' && piece.search(/^w/) !== -1)) {
-            return false;
-        }
-    }
+
+
+const PIECES = {
+
+    'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', 'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+
+    'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg', 'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+
+    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', 'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+
+    'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', 'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+
+    'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', 'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+
+    'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', 'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg'
+
+};
+
+
+
+let board, turn = "white", selected = null, history = [];
+
+let myColor = "white", onlineRoom = null;
+
+
+
+function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
+
+
+
+// --- 2. CHAT & SYSTEM (VOLLSTÄNDIG) ---
+
+function addChat(sender, text, type) {
+
+    const m = document.createElement("div");
+
+    m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
+
+    m.innerHTML = type === "system" ? `⚙️ ${text}` : `<strong>${sender}:</strong> ${text}`;
+
+    chatMessages.appendChild(m);
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
 }
 
-function onDrop(source, target) {
-    var move = game.move({
-        from: source,
-        to: target,
-        promotion: 'q' 
+
+
+document.querySelectorAll('.emoji-btn').forEach(b => {
+
+    b.onclick = () => { chatInput.value += b.textContent; chatInput.focus(); };
+
+});
+
+
+
+function sendMsg() {
+
+    const t = chatInput.value.trim();
+
+    if (t && socket.readyState === 1) {
+
+        socket.send(JSON.stringify({ type: 'chat', text: t, sender: getMyName(), room: onlineRoom }));
+
+        addChat("Ich", t, "me"); chatInput.value = "";
+
+    }
+
+}
+
+document.getElementById("send-chat").onclick = sendMsg;
+
+chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
+
+
+
+// --- 3. SERVER EVENT HANDLING (VOLLSTÄNDIG) ---
+
+socket.onmessage = (e) => {
+
+    const d = JSON.parse(e.data);
+
+    switch(d.type) {
+
+        case 'join':
+
+            onlineRoom = d.room;
+
+            document.getElementById("roomID").value = d.room;
+
+            if (d.color) {
+
+                myColor = d.color;
+
+                myColor === "black" ? boardEl.classList.add("flipped") : boardEl.classList.remove("flipped");
+
+            }
+
+            addChat("System", d.systemMsg || `Raum ${d.room} verbunden.`, "system");
+
+            resetGame();
+
+            break;
+
+        case 'move':
+
+            if (gameModeSelect.value === "online" || gameModeSelect.value === "random") {
+
+                doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false);
+
+            }
+
+            break;
+
+        case 'chat':
+
+            addChat(d.sender, d.text, "other");
+
+            break;
+
+        case 'user-count':
+
+            document.getElementById("user-counter").textContent = "Online: " + d.count;
+
+            break;
+
+        case 'leaderboard':
+
+            document.getElementById("leaderboard-list").innerHTML = d.list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
+
+            break;
+
+    }
+
+};
+
+
+
+gameModeSelect.onchange = () => {
+
+    if (gameModeSelect.value === "random") {
+
+        addChat("System", "Suche läuft... 🎲", "system");
+
+        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
+
+    } else {
+
+        boardEl.classList.remove("flipped");
+
+        myColor = "white";
+
+    }
+
+};
+
+
+
+document.getElementById("connectMP").onclick = () => {
+
+    const r = document.getElementById("roomID").value || "global";
+
+    socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
+
+};
+
+
+
+// --- 4. REGELN & SCHACH-LOGIK ---
+
+
+
+function findKing(c) {
+
+    const target = (c === "white" ? "K" : "k");
+
+    for(let r=0; r<8; r++) for(let col=0; col<8; col++) if(board[r][col] === target) return {r, c: col};
+
+    return null;
+
+}
+
+
+
+function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
+
+
+
+function canMoveLogic(fr, fc, tr, tc, b = board) {
+
+    const p = b[fr][fc]; if(!p) return false;
+
+    const target = b[tr][tc]; if(target && isOwn(target, isOwn(p, "white") ? "white" : "black")) return false;
+
+    const dr = Math.abs(tr - fr), dc = Math.abs(tc - fc), type = p.toLowerCase();
+
+    
+
+    if(type === 'p') {
+
+        const dir = (p === 'P') ? -1 : 1;
+
+        if(fc === tc && b[tr][tc] === "") {
+
+            if(tr - fr === dir) return true;
+
+            if(tr - fr === 2*dir && (fr === 1 || fr === 6) && b[fr+dir][fc] === "") return true;
+
+        } else if(dc === 1 && tr - fr === dir && b[tr][tc] !== "") return true;
+
+        return false;
+
+    }
+
+    const pathClear = () => {
+
+        const rD = Math.sign(tr - fr), cD = Math.sign(tc - fc);
+
+        let r = fr + rD, c = fc + cD;
+
+        while(r !== tr || c !== tc) { if(b[r][c] !== "") return false; r += rD; c += cD; }
+
+        return true;
+
+    };
+
+    if(type === 'r') return (fr === tr || fc === tc) && pathClear();
+
+    if(type === 'b') return dr === dc && pathClear();
+
+    if(type === 'q') return (fr === tr || fc === tc || dr === dc) && pathClear();
+
+    if(type === 'n') return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
+
+    if(type === 'k') return dr <= 1 && dc <= 1;
+
+    return false;
+
+}
+
+
+
+function isAttacked(tr, tc, attackerColor) {
+
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
+
+        if(board[r][c] && isOwn(board[r][c], attackerColor) && canMoveLogic(r, c, tr, tc)) return true;
+
+    return false;
+
+}
+
+
+
+function isSafeMove(fr, fc, tr, tc) {
+
+    const p = board[fr][fc], t = board[tr][tc];
+
+    board[tr][tc] = p; board[fr][fc] = "";
+
+    const k = findKing(turn);
+
+    const safe = k ? !isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : true;
+
+    board[fr][fc] = p; board[tr][tc] = t;
+
+    return safe;
+
+}
+
+
+
+function checkGameOver() {
+
+    let moves = 0;
+
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
+
+        if(board[r][c] && isOwn(board[r][c])) 
+
+            for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) 
+
+                if(canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) moves++;
+
+
+
+    if(moves === 0) {
+
+        const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+
+        if(inCheck) {
+
+            const winner = turn === "white" ? "Schwarz" : "Weiß";
+
+            statusEl.textContent = `MATT! ${winner} GEWINNT!`;
+
+            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
+
+        } else { statusEl.textContent = "PATT! Unentschieden."; }
+
+        return true;
+
+    }
+
+    return false;
+
+}
+
+
+
+// --- 5. SPIEL-STEUERUNG ---
+
+
+
+function resetGame() {
+
+    board = [
+
+        ["r","n","b","q","k","b","n","r"], ["p","p","p","p","p","p","p","p"],
+
+        ["","","","","","","",""], ["","","","","","","",""],
+
+        ["","","","","","","",""], ["","","","","","","",""],
+
+        ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
+
+    ];
+
+    turn = "white"; selected = null; history = [];
+
+    statusEl.textContent = "Weiß am Zug";
+
+    draw();
+
+}
+
+
+
+function doMove(fr, fc, tr, tc, emit = true) {
+
+    const isCap = board[tr][tc] !== "";
+
+    board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
+
+    
+
+    if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
+
+    if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
+
+
+
+    if (emit && socket.readyState === 1 && gameModeSelect.value !== "local") {
+
+        socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
+
+    }
+
+
+
+    turn = (turn === "white" ? "black" : "white");
+
+    const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+
+    
+
+    if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
+
+    
+
+    if(!checkGameOver()) {
+
+        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
+
+    }
+
+    draw();
+
+
+
+    if(turn === "black" && gameModeSelect.value === "bot") {
+
+        stockfishWorker.postMessage({ board, turn: "black" });
+
+    }
+
+}
+
+
+
+function draw() {
+
+    boardEl.innerHTML = "";
+
+    const k = findKing(turn);
+
+    const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
+
+
+
+    board.forEach((row, r) => {
+
+        row.forEach((p, c) => {
+
+            const d = document.createElement("div");
+
+            d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+
+            if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
+
+            if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
+
+            
+
+            if(p) {
+
+                const img = document.createElement("img"); img.src = PIECES[p];
+
+                img.style.width = "85%"; d.appendChild(img);
+
+            }
+
+            
+
+            d.onclick = () => {
+
+                const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
+
+                if(isOnline && turn !== myColor) return;
+
+
+
+                if(selected) {
+
+                    if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
+
+                        doMove(selected.r, selected.c, r, c);
+
+                        selected = null;
+
+                    } else {
+
+                        selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null;
+
+                    }
+
+                } else if(board[r][c] && isOwn(board[r][c])) {
+
+                    if(isOnline && !isOwn(board[r][c], myColor)) return;
+
+                    selected = {r, c};
+
+                }
+
+                draw();
+
+            };
+
+            boardEl.appendChild(d);
+
+        });
+
     });
 
-    if (move === null) return 'snapback';
-
-    playSound('move');
-
-    if (currentRoom) {
-        // Zug an den Server senden
-        socket.send(JSON.stringify({ type: 'move', move: move, room: currentRoom }));
-    } else {
-        // Gegen den Bot: Bot zieht nach 500ms
-        window.setTimeout(makeBotMove, 500);
-    }
-
-    checkGameOver();
 }
 
-function onSnapEnd() {
-    board.position(game.fen());
-}
 
-// ==========================================
-// 5. BOT-LOGIK (Einfache KI)
-// ==========================================
-function makeBotMove() {
-    var possibleMoves = game.moves();
-    if (game.game_over()) return;
 
-    // Zufälliger Zug
-    var randomIdx = Math.floor(Math.random() * possibleMoves.length);
-    game.move(possibleMoves[randomIdx]);
-    
-    board.position(game.fen());
-    playSound('move');
-    checkGameOver();
-}
+document.getElementById("undoBtn").onclick = () => { /* Undo Logik */ };
 
-// ==========================================
-// 6. GEWINN-PRÜFUNG
-// ==========================================
-function checkGameOver() {
-    if (game.game_over()) {
-        playSound('win');
-        
-        // Wenn man selbst gewonnen hat (am Zug ist der andere), Sieg an Server melden
-        if (game.in_checkmate()) {
-            const myName = document.getElementById('playerNameInput').value || "Anonym";
-            socket.send(JSON.stringify({ type: 'win', playerName: myName }));
-            alert("Schachmatt! Sieg eingetragen.");
-        } else {
-            alert("Spiel beendet!");
-        }
-    }
-}
+document.getElementById("resetBtn").onclick = resetGame;
 
-// ==========================================
-// 7. INTERAKTIONEN (BUTTONS)
-// ==========================================
+document.getElementById("resignBtn").onclick = () => {
 
-// RÜCKGÄNGIG TASTE
-document.getElementById('undoBtn').addEventListener('click', function() {
-    if (currentRoom) {
-        alert("Im Online-Modus darfst du nicht schummeln!");
-        return;
-    }
-    // Bot-Modus: Deinen UND den Bot-Zug rückgängig machen
-    game.undo();
-    game.undo();
-    board.position(game.fen());
-    playSound('move');
-});
+    addChat("System", "Spiel aufgegeben.", "system");
 
-// GEGNER SUCHEN
-document.getElementById('findRandomBtn').addEventListener('click', function() {
-    socket.send(JSON.stringify({ type: 'find_random' }));
-});
+    resetGame();
 
-// CHAT SENDEN
-function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    if (input.value && currentRoom) {
-        socket.send(JSON.stringify({ type: 'chat', msg: input.value, room: currentRoom }));
-        const chatLog = document.getElementById('chat-log');
-        chatLog.innerHTML += `<div><b>Du:</b> ${input.value}</div>`;
-        chatLog.scrollTop = chatLog.scrollHeight;
-        input.value = '';
-    }
-}
-
-document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
-
-// ==========================================
-// 8. BOARD STARTEN
-// ==========================================
-var config = {
-    draggable: true,
-    position: 'start',
-    onDragStart: onDragStart,
-    onDrop: onDrop,
-    onSnapEnd: onSnapEnd
 };
 
-board = Chessboard('myBoard', config);
+
+
+stockfishWorker.onmessage = (e) => {
+
+    if(e.data && turn === "black") setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600);
+
+};
+
+
+
+resetGame();
+
