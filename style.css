@@ -1,66 +1,92 @@
-:root {
-    --primary: #007bff;
-    --success: #28a745;
-    --warning: #f1c40f;
-    --danger: #dc3545;
-    --bg: #0d0d0d;
+/* Grunddesign aus Bild 1 */
+body {
+    background-color: #000000;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
 }
 
-body { 
-    background: radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);
-    color: white; font-family: 'Segoe UI', Roboto, sans-serif; 
-    margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh;
+#game-container {
+    display: flex;
+    gap: 20px;
+    max-width: 1200px;
 }
 
-.game-container { display: flex; gap: 30px; padding: 20px; max-width: 1300px; width: 100%; }
-
-/* Schachbrett Design */
-#chess-board { 
-    display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); 
-    border: 10px solid #222; border-radius: 8px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 20px rgba(0, 123, 255, 0.1);
-    transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+/* Schachbrett */
+#myBoard {
+    width: 600px;
+    border: 5px solid #333;
+    border-radius: 10px;
 }
 
-.flipped { transform: rotate(180deg); }
-.flipped .square img { transform: rotate(180deg); }
-
-.square { width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; cursor: pointer; position: relative; }
-.white-sq { background-color: #f0d9b5; }
-.black-sq { background-color: #b58863; }
-
-.selected { background-color: rgba(255, 255, 0, 0.5) !important; box-shadow: inset 0 0 15px rgba(255, 255, 0, 0.8); }
-.in-check { background-color: rgba(255, 0, 0, 0.6) !important; animation: pulse-red 1s infinite; }
-
-@keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-
-/* Sidebar & Glassmorphism */
-.sidebar { width: 420px; display: flex; flex-direction: column; gap: 15px; }
-.glass-panel { 
-    background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 15px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+/* Sidebar Elemente */
+.sidebar {
+    width: 350px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
-#chat-container { 
-    height: 380px; background: rgba(0,0,0,0.4); border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);
-    display: flex; flex-direction: column; overflow: hidden;
+.panel {
+    background: #1a1a1a;
+    border-radius: 10px;
+    padding: 15px;
+    border: 1px solid #333;
 }
 
-#chat-messages { flex-grow: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
-
-.msg { padding: 8px 14px; border-radius: 12px; font-size: 0.9em; max-width: 85%; animation: fadeIn 0.3s ease; }
-.my-msg { align-self: flex-end; background: var(--primary); color: white; }
-.other-msg { align-self: flex-start; background: #333; }
-.system-msg { align-self: center; background: rgba(241, 196, 15, 0.1); color: var(--warning); border: 1px solid var(--warning); width: 90%; text-align: center; font-size: 0.8em; }
-
-input, select, button { 
-    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); 
-    color: white; padding: 10px; border-radius: 8px; transition: 0.2s;
+/* Leaderboard-Design aus Bild 1 */
+#leaderboard-container {
+    border: 1px solid #444;
 }
-button { cursor: pointer; font-weight: bold; border: none; }
-button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
-#send-chat { background: var(--success); }
-.control-row { display: flex; gap: 10px; margin-top: 15px; }
-.control-row button { flex: 1; }
-#resignBtn { background: var(--danger); }
+
+#leaderboard-container h2 {
+    color: #ffd700;
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.leaderboard-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #333;
+}
+
+.wins {
+    color: #ffd700;
+    font-weight: bold;
+}
+
+/* Buttons */
+.btn-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+button {
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+#undoBtn { background: #444; color: white; }
+#undoBtn.disabled { opacity: 0.3; cursor: not-allowed; }
+#newGameBtn { background: #2980b9; color: white; }
+#resignBtn { background: #c0392b; color: white; }
+#sendChatBtn { background: #27ae60; color: white; }
+
+/* Chat */
+#chat-log {
+    height: 150px;
+    overflow-y: auto;
+    background: #000;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
