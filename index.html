@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="style.css">
-    <title>Schach Live</title>
+    <title>Schach Live - Ultimate</title>
 </head>
 <body>
 
@@ -35,7 +35,8 @@
                     <span>🎮 <strong>Spielmodus</strong></span>
                     <select id="gameMode">
                         <option value="local">Lokal (2 Spieler am Gerät)</option>
-                        <option value="bot">Gegen den Bot (Smart)</option>
+                        <option value="bot_easy">🤖 Bot: Einfach (Anfänger)</option>
+                        <option value="bot_hard">🤖 Bot: Schwierig (Profi)</option>
                         <option value="random">Zufälliger Gegner (Suche)</option>
                         <option value="online">Online (Privat)</option>
                     </select>
@@ -63,8 +64,7 @@
 
             <div class="glass-panel">
                 <span>🏆 <strong>Beste Spieler</strong></span>
-                <div id="leaderboard-list">
-                    </div>
+                <div id="leaderboard-list"></div>
             </div>
         </div>
     </div>
