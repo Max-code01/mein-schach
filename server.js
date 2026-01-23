@@ -1,78 +1,78 @@
 const WebSocket = require('ws');
 const http = require('http');
-const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
 
-// --- SERVER SETUP ---
 const server = http.createServer((req, res) => {
     res.writeHead(200);
-    res.end("Schach-Server mit Supabase-Datenbank läuft!");
+    res.end("Schach-Server läuft!");
 });
+
 const wss = new WebSocket.Server({ server });
 
-// --- SUPABASE SETUP ---
-// Die Werte kommen sicher aus den Render-Umgebungsvariablen
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// --- PERMANENTE SPEICHERUNG SETUP ---
+const LB_FILE = './leaderboard.json';
+let leaderboard = {};
+
+// Beim Start: Bestehende Daten laden
+if (fs.existsSync(LB_FILE)) {
+    try {
+        const data = fs.readFileSync(LB_FILE, 'utf8');
+        leaderboard = JSON.parse(data);
+        console.log("Leaderboard geladen.");
+    } catch (e) {
+        console.error("Fehler beim Laden des Leaderboards:", e);
+        leaderboard = {};
+    }
+}
+
+// Funktion zum Speichern auf die Festplatte
+function saveLeaderboard() {
+    try {
+        fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
+    } catch (e) {
+        console.error("Fehler beim Speichern:", e);
+    }
+}
 
 let waitingPlayer = null;
 
-wss.on('connection', async (ws) => {
-    // Beim Verbinden sofort das aktuelle Leaderboard schicken
-    await sendLeaderboard(ws);
+wss.on('connection', (ws) => {
+    // Sofort das aktuelle Leaderboard an den neuen Spieler senden
+    sendLeaderboard(ws);
 
-    ws.on('message', async (message) => {
+    ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // --- 1. SIEG SPEICHERN ---
+            // 1. SIEG SPEICHERN (Permanent)
             if (data.type === 'win') {
                 const name = data.playerName || "Anonym";
-                
-                // Prüfen, ob der Spieler bereits in der DB existiert
-                const { data: userEntry } = await supabase
-                    .from('leaderboard')
-                    .select('wins')
-                    .eq('name', name)
-                    .single();
-
-                if (userEntry) {
-                    // Update: Bestehende Siege um 1 erhöhen
-                    await supabase
-                        .from('leaderboard')
-                        .update({ wins: userEntry.wins + 1 })
-                        .eq('name', name);
-                } else {
-                    // Insert: Neuen Spieler mit 1 Sieg anlegen
-                    await supabase
-                        .from('leaderboard')
-                        .insert([{ name: name, wins: 1 }]);
-                }
-                // Alle Clients über das neue Leaderboard informieren
-                await broadcastLeaderboard();
+                leaderboard[name] = (leaderboard[name] || 0) + 1;
+                saveLeaderboard(); // In Datei schreiben
+                broadcastLeaderboard(); // Alle informieren
             }
 
-            // --- 2. MATCHMAKING ---
+            // 2. MATCHMAKING (Random Player)
             if (data.type === 'find_random') {
                 if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
                     const roomID = "random_" + Math.random();
-                    waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden!" }));
-                    ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden!" }));
-                    waitingPlayer.room = roomID; 
-                    ws.room = roomID;
+                    waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden! Du bist WEISS." }));
+                    ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden! Du bist SCHWARZ." }));
+                    waitingPlayer.room = roomID; ws.room = roomID;
                     waitingPlayer = null;
                 } else {
                     waitingPlayer = ws;
                 }
             }
 
-            // --- 3. KOMMUNIKATION (Moves & Chat) ---
-            if (data.type === 'join') {
+            // 3. NORMALE WEITERLEITUNG (Chat, Move, Join)
+            if (data.type === 'join' && !data.type.startsWith('find_')) {
                 ws.room = data.room;
                 ws.playerName = data.name;
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
+            // Nachrichten nur an Leute im gleichen Raum senden
             if (data.type === 'chat' || data.type === 'move') {
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
@@ -81,10 +81,10 @@ wss.on('connection', async (ws) => {
                 });
             }
 
+            // User-Counter an alle senden
             broadcastUserCount();
-        } catch (e) {
-            console.error("Server-Fehler:", e);
-        }
+
+        } catch (e) { console.error("Server Error:", e); }
     });
 
     ws.on('close', () => {
@@ -93,41 +93,27 @@ wss.on('connection', async (ws) => {
     });
 });
 
-// --- HILFSFUNKTIONEN FÜR DIE DATENBANK ---
-
-async function broadcastLeaderboard() {
-    // Top 5 Spieler aus Supabase abrufen
-    const { data: list } = await supabase
-        .from('leaderboard')
-        .select('name, wins')
-        .order('wins', { ascending: false })
-        .limit(5);
-
-    if (list) {
-        const msg = JSON.stringify({ type: 'leaderboard', list });
-        wss.clients.forEach(c => {
-            if(c.readyState === WebSocket.OPEN) c.send(msg);
-        });
-    }
+// Hilfsfunktionen
+function broadcastLeaderboard() {
+    const list = Object.entries(leaderboard)
+        .map(([name, wins]) => ({ name, wins }))
+        .sort((a, b) => b.wins - a.wins)
+        .slice(0, 5);
+    const msg = JSON.stringify({ type: 'leaderboard', list });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
-async function sendLeaderboard(ws) {
-    const { data: list } = await supabase
-        .from('leaderboard')
-        .select('name, wins')
-        .order('wins', { ascending: false })
-        .limit(5);
-    
-    if (list) {
-        ws.send(JSON.stringify({ type: 'leaderboard', list }));
-    }
+function sendLeaderboard(ws) {
+    const list = Object.entries(leaderboard)
+        .map(([name, wins]) => ({ name, wins }))
+        .sort((a, b) => b.wins - a.wins)
+        .slice(0, 5);
+    ws.send(JSON.stringify({ type: 'leaderboard', list }));
 }
 
 function broadcastUserCount() {
     const msg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
-    wss.clients.forEach(c => {
-        if(c.readyState === WebSocket.OPEN) c.send(msg);
-    });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
 const PORT = process.env.PORT || 8080;
