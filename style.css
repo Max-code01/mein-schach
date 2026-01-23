@@ -64,27 +64,3 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
 .control-row { display: flex; gap: 10px; margin-top: 15px; }
 .control-row button { flex: 1; }
 #resignBtn { background: var(--danger); }
-
-// Such die Stelle, wo die Nachricht vom Server verarbeitet wird:
-if (data.type === 'leaderboard') {
-    const container = document.getElementById('leaderboard-list'); // oder wie dein Element heißt
-    container.innerHTML = ''; // Leeren
-
-    data.list.forEach((player, index) => {
-        const entry = document.createElement('div');
-        entry.className = 'leaderboard-entry';
-        
-        // Emojis für die ersten drei Plätze
-        let medal = "";
-        if(index === 0) medal = "🥇 ";
-        else if(index === 1) medal = "🥈 ";
-        else if(index === 2) medal = "🥉 ";
-
-        entry.innerHTML = `
-            <span class="rank">${index + 1}.</span>
-            <span class="name">${medal}${player.name}</span>
-            <span class="wins">${player.wins} 🏆</span>
-        `;
-        container.appendChild(entry);
-    });
-}
