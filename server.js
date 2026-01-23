@@ -4,79 +4,76 @@ const fs = require('fs');
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
-    res.end("Schach-Server läuft und ist bereit!");
+    res.end("Schach-Server läuft!");
 });
 
 const wss = new WebSocket.Server({ server });
 
-// Leaderboard-Datei Setup
+// --- PERMANENTE SPEICHERUNG SETUP ---
 const LB_FILE = './leaderboard.json';
 let leaderboard = {};
 
+// Beim Start: Bestehende Daten laden
 if (fs.existsSync(LB_FILE)) {
     try {
-        const fileContent = fs.readFileSync(LB_FILE, 'utf8');
-        leaderboard = JSON.parse(fileContent);
+        const data = fs.readFileSync(LB_FILE, 'utf8');
+        leaderboard = JSON.parse(data);
+        console.log("Leaderboard geladen.");
     } catch (e) {
         console.error("Fehler beim Laden des Leaderboards:", e);
         leaderboard = {};
     }
 }
 
+// Funktion zum Speichern auf die Festplatte
 function saveLeaderboard() {
     try {
         fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
     } catch (e) {
-        console.error("Fehler beim Speichern des Leaderboards:", e);
+        console.error("Fehler beim Speichern:", e);
     }
 }
 
 let waitingPlayer = null;
 
 wss.on('connection', (ws) => {
-    // Sende Leaderboard sofort bei Verbindung
-    sendLeaderboardToClient(ws);
+    // Sofort das aktuelle Leaderboard an den neuen Spieler senden
+    sendLeaderboard(ws);
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // --- SIEG REGISTRIEREN ---
+            // 1. SIEG SPEICHERN (Permanent)
             if (data.type === 'win') {
                 const name = data.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
-                saveLeaderboard();
-                broadcastLeaderboard();
+                saveLeaderboard(); // In Datei schreiben
+                broadcastLeaderboard(); // Alle informieren
             }
 
-            // --- MATCHMAKING (RANDOM) ---
+            // 2. MATCHMAKING (Random Player)
             if (data.type === 'find_random') {
                 if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
                     const roomID = "random_" + Math.random();
-                    const msg1 = JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden!" });
-                    const msg2 = JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden!" });
-                    
-                    waitingPlayer.send(msg1);
-                    ws.send(msg2);
-                    
-                    waitingPlayer.room = roomID;
-                    ws.room = roomID;
+                    waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden! Du bist WEISS." }));
+                    ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden! Du bist SCHWARZ." }));
+                    waitingPlayer.room = roomID; ws.room = roomID;
                     waitingPlayer = null;
                 } else {
                     waitingPlayer = ws;
-                    ws.send(JSON.stringify({ type: 'system', msg: "Suche läuft..." }));
                 }
             }
 
-            // --- RAUM BEITRETEN ---
-            if (data.type === 'join') {
+            // 3. NORMALE WEITERLEITUNG (Chat, Move, Join)
+            if (data.type === 'join' && !data.type.startsWith('find_')) {
                 ws.room = data.room;
                 ws.playerName = data.name;
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
-            // --- CHAT, MOVES & EMOTES WEITERLEITEN ---
-            if (data.type === 'chat' || data.type === 'move' || data.type === 'emote') {
+            // Nachrichten nur an Leute im gleichen Raum senden
+            if (data.type === 'chat' || data.type === 'move') {
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
                         client.send(JSON.stringify(data));
@@ -84,35 +81,39 @@ wss.on('connection', (ws) => {
                 });
             }
 
-            // --- USER COUNT ---
-            const countMsg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
-            wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(countMsg); });
+            // User-Counter an alle senden
+            broadcastUserCount();
 
-        } catch (e) {
-            console.error("Fehler bei Nachricht:", e);
-        }
+        } catch (e) { console.error("Server Error:", e); }
     });
 
     ws.on('close', () => {
-        if (waitingPlayer === ws) waitingPlayer = null;
+        if(waitingPlayer === ws) waitingPlayer = null;
+        broadcastUserCount();
     });
 });
 
+// Hilfsfunktionen
 function broadcastLeaderboard() {
     const list = Object.entries(leaderboard)
         .map(([name, wins]) => ({ name, wins }))
         .sort((a, b) => b.wins - a.wins)
         .slice(0, 5);
     const msg = JSON.stringify({ type: 'leaderboard', list });
-    wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
-function sendLeaderboardToClient(ws) {
+function sendLeaderboard(ws) {
     const list = Object.entries(leaderboard)
         .map(([name, wins]) => ({ name, wins }))
         .sort((a, b) => b.wins - a.wins)
         .slice(0, 5);
     ws.send(JSON.stringify({ type: 'leaderboard', list }));
+}
+
+function broadcastUserCount() {
+    const msg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
 const PORT = process.env.PORT || 8080;
