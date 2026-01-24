@@ -10,18 +10,19 @@ const wss = new WebSocket.Server({ server });
 
 // --- PERMANENTE SPEICHERUNG ---
 const LB_FILE = './leaderboard.json';
-const USER_FILE = './userDB.json'; // NEU: Passwort-Datenbank
+const USER_FILE = './userDB.json'; // NEU hinzugefügt
 let leaderboard = {};
-let userDB = {}; // NEU: Speichert Name -> Passwort
+let userDB = {}; // NEU hinzugefügt
 let bannedPlayers = new Set(); 
 let mutedPlayers = new Set(); 
 
 const adminPass = "geheim123"; // Dein Admin-Passwort
 
+// Bestehendes Leaderboard laden
 if (fs.existsSync(LB_FILE)) {
     try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch (e) { leaderboard = {}; }
 }
-// NEU: Lade Benutzerdaten beim Start
+// NEU: Benutzerdaten laden
 if (fs.existsSync(USER_FILE)) {
     try { userDB = JSON.parse(fs.readFileSync(USER_FILE, 'utf8')); } catch (e) { userDB = {}; }
 }
@@ -30,7 +31,6 @@ function saveLeaderboard() {
     try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Fehler:", e); }
 }
 
-// NEU: Speichere Benutzerdaten
 function saveUsers() {
     try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("Fehler:", e); }
 }
@@ -49,21 +49,17 @@ wss.on('connection', (ws) => {
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-
-            // NEU: Name und Passwort extrahieren
             const inputName = (data.playerName || data.name || "").trim();
             const inputPass = data.password;
 
-            // --- NICKNAME-SCHUTZ LOGIK ---
+            // --- NEU: NICKNAME-SCHUTZ LOGIK ---
             if (data.type === 'join') {
                 if (inputName) {
                     if (!userDB[inputName]) {
-                        // Erster Login: Registrieren
                         userDB[inputName] = inputPass || "";
                         saveUsers();
                         ws.playerName = inputName;
                     } else {
-                        // Name existiert: Passwort prüfen
                         if (userDB[inputName] === (inputPass || "")) {
                             ws.playerName = inputName;
                         } else {
@@ -76,12 +72,11 @@ wss.on('connection', (ws) => {
             }
 
             if (ws.playerName && bannedPlayers.has(ws.playerName)) {
-                ws.send(JSON.stringify({ type: 'chat', text: 'DU BIST GEBANNT!', sender: 'SYSTEM' }));
                 ws.terminate();
                 return;
             }
 
-            // --- ADMIN BEFEHLE ---
+            // --- NEU: ADMIN BEFEHLE ---
             if (data.type === 'chat' && data.text.startsWith('/')) {
                 const parts = data.text.split(' ');
                 const cmd = parts[0];
@@ -112,12 +107,7 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            if (data.type === 'chat' && mutedPlayers.has(ws.playerName)) {
-                ws.send(JSON.stringify({ type: 'chat', text: 'Du bist stummgeschaltet.', sender: 'System' }));
-                return;
-            }
-
-            // --- BESTEHENDE FUNKTIONEN (Sieg, Matchmaking, Move) ---
+            // --- DEINE BESTEHENDE LOGIK (UNVERÄNDERT) ---
             if (data.type === 'win') {
                 const name = ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
@@ -142,6 +132,7 @@ wss.on('connection', (ws) => {
             }
 
             if (data.type === 'chat' || data.type === 'move') {
+                if (mutedPlayers.has(ws.playerName) && data.type === 'chat') return;
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
                         client.send(JSON.stringify(data));
@@ -154,7 +145,6 @@ wss.on('connection', (ws) => {
 
         } catch (e) { console.error("Error:", e); }
     });
-
     ws.on('close', () => { if(waitingPlayer === ws) waitingPlayer = null; });
 });
 
