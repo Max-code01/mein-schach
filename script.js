@@ -5,7 +5,9 @@ const chatInput = document.getElementById("chat-input");
 const gameModeSelect = document.getElementById("gameMode");
 const nameInput = document.getElementById("playerName");
 const passInput = document.getElementById("playerPass");
+const saveBtn = document.getElementById("saveAccountBtn");
 
+// --- 1. KONFIGURATION ---
 let stockfishWorker = new Worker('engineWorker.js'); 
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
@@ -27,6 +29,23 @@ const PIECES = {
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
 
+// PASSWORT SPEICHER LOGIK
+window.addEventListener('load', () => {
+    const savedName = localStorage.getItem('chess_name');
+    const savedPass = localStorage.getItem('chess_pass');
+    if (savedName && savedPass) {
+        nameInput.value = savedName;
+        passInput.value = savedPass;
+        document.getElementById("save-status").textContent = "✅ Passwort geladen";
+    }
+});
+
+saveBtn.onclick = () => {
+    localStorage.setItem('chess_name', nameInput.value);
+    localStorage.setItem('chess_pass', passInput.value);
+    document.getElementById("save-status").textContent = "💾 Sicher gespeichert!";
+};
+
 const cpWhite = document.getElementById("colorWhite");
 const cpBlack = document.getElementById("colorBlack");
 [cpWhite, cpBlack].forEach(cp => {
@@ -39,6 +58,7 @@ const cpBlack = document.getElementById("colorBlack");
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 function getMyPass() { return passInput.value; }
 
+// --- 2. CHAT & SYSTEM ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -61,6 +81,7 @@ function sendMsg() {
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
+// --- 3. SERVER EVENT HANDLING ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
@@ -106,6 +127,7 @@ document.getElementById("connectMP").onclick = () => {
     socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName(), password: getMyPass() }));
 };
 
+// --- 4. REGELN & SCHACH-LOGIK ---
 function findKing(c) {
     const target = (c === "white" ? "K" : "k");
     for(let r=0; r<8; r++) for(let col=0; col<8; col++) if(board[r][col] === target) return {r, c: col};
@@ -208,28 +230,11 @@ function doMove(fr, fc, tr, tc, emit = true) {
 
 function draw() {
     boardEl.innerHTML = "";
-    const k = findKing(turn);
-    const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
-    let possibleMoves = [];
-    if (selected) {
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                if (canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
-                    possibleMoves.push({r, c});
-                }
-            }
-        }
-    }
     board.forEach((row, r) => {
         row.forEach((p, c) => {
             const d = document.createElement("div");
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
-            if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
-            if (possibleMoves.some(m => m.r === r && m.c === c)) {
-                const dot = document.createElement("div");
-                dot.className = "move-dot"; d.appendChild(dot);
-            }
             if(p) { const img = document.createElement("img"); img.src = PIECES[p]; img.style.width = "85%"; d.appendChild(img); }
             d.onclick = () => handleSquareClick(r, c);
             boardEl.appendChild(d);
@@ -261,7 +266,6 @@ document.getElementById("undoBtn").onclick = () => {
     if (history.length > 0) {
         const lastState = history.pop();
         board = lastState.board; turn = lastState.turn;
-        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
         draw();
     }
 };
