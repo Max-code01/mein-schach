@@ -4,7 +4,6 @@
     --warning: #f1c40f;
     --danger: #dc3545;
     --bg: #0d0d0d;
-    /* Neue Variablen für Farbwahl */
     --board-white: #f0d9b5;
     --board-black: #b58863;
 }
@@ -27,13 +26,14 @@ body {
 .flipped { transform: rotate(180deg); }
 .flipped .square img { transform: rotate(180deg); }
 
-.square { width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; cursor: pointer; position: relative; }
+.square { 
+    width: 65px; height: 65px; display: flex; justify-content: center; 
+    align-items: center; cursor: pointer; position: relative; 
+}
 
-/* Farbwahl angewendet */
 .white-sq { background-color: var(--board-white); }
 .black-sq { background-color: var(--board-black); }
 
-/* Punkt für mögliche Züge */
 .move-dot {
     width: 18px;
     height: 18px;
