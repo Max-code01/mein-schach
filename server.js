@@ -4,7 +4,7 @@ const fs = require('fs');
 
 const server = http.createServer((req, res) => { 
     res.writeHead(200); 
-    res.end("Schach-Server mit God-Mode und Nick-Schutz läuft!"); 
+    res.end("Schach-Server mit Admin-Mode und Nick-Schutz läuft!"); 
 });
 const wss = new WebSocket.Server({ server });
 
@@ -18,6 +18,7 @@ let mutedPlayers = new Set();
 
 const adminPass = "geheim123"; // Dein Admin-Passwort
 
+// Dateien laden
 if (fs.existsSync(LB_FILE)) {
     try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch (e) { leaderboard = {}; }
 }
@@ -26,11 +27,11 @@ if (fs.existsSync(USER_FILE)) {
 }
 
 function saveLeaderboard() {
-    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Speicherfehler:", e); }
+    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Fehler:", e); }
 }
 
 function saveUsers() {
-    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("User-Speicherfehler:", e); }
+    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("Fehler:", e); }
 }
 
 function broadcastSystemMsg(text) {
@@ -41,25 +42,25 @@ function broadcastSystemMsg(text) {
 let waitingPlayer = null;
 
 wss.on('connection', (ws) => {
-    // Leaderboard beim Connect schicken
+    // Leaderboard beim Start schicken
     const list = Object.entries(leaderboard).map(([name, wins]) => ({ name, wins })).sort((a,b)=>b.wins-a.wins).slice(0,5);
     ws.send(JSON.stringify({ type: 'leaderboard', list }));
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            const inputName = (data.playerName || data.name || data.sender || "").trim();
-            const inputPass = data.password;
+            const inputName = (data.name || data.playerName || data.sender || "").trim();
+            const inputPass = data.password || "";
 
-            // Nickname-Schutz Logik
-            if (data.type === 'join') {
+            // --- NICKNAME-SCHUTZ LOGIK ---
+            if (data.type === 'join' || data.type === 'find_random') {
                 if (inputName) {
                     if (!userDB[inputName]) {
-                        userDB[inputName] = inputPass || "";
+                        userDB[inputName] = inputPass;
                         saveUsers();
                         ws.playerName = inputName;
                     } else {
-                        if (userDB[inputName] === (inputPass || "")) {
+                        if (userDB[inputName] === inputPass) {
                             ws.playerName = inputName;
                         } else {
                             ws.send(JSON.stringify({ type: 'chat', text: 'NICK GESCHÜTZT! Falsches Passwort.', sender: 'System', system: true }));
@@ -70,12 +71,13 @@ wss.on('connection', (ws) => {
                 }
             }
 
+            // BAN-CHECK
             if (ws.playerName && bannedPlayers.has(ws.playerName)) {
                 ws.terminate();
                 return;
             }
 
-            // Admin Befehle
+            // --- ADMIN BEFEHLE ---
             if (data.type === 'chat' && data.text.startsWith('/') && data.text.includes(adminPass)) {
                 const parts = data.text.split(' ');
                 const cmd = parts[0].toLowerCase();
@@ -85,7 +87,7 @@ wss.on('connection', (ws) => {
                     if (cmd === '/ban') bannedPlayers.add(target);
                     wss.clients.forEach(client => {
                         if (client.playerName === target) {
-                            client.send(JSON.stringify({ type: 'chat', text: 'KICK DURCH ADMIN!', sender: 'SYSTEM' }));
+                            client.send(JSON.stringify({ type: 'chat', text: 'Admin hat dich entfernt!', sender: 'SYSTEM' }));
                             client.terminate();
                         }
                     });
@@ -99,9 +101,9 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // Deine bestehende Logik
+            // --- DEINE BESTEHENDE LOGIK (UNGEKÜRZT) ---
             if (data.type === 'win') {
-                const name = ws.playerName || "Anonym";
+                const name = data.name || ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
                 saveLeaderboard();
                 const updatedList = Object.entries(leaderboard).map(([n, w]) => ({ name: n, wins: w })).sort((a,b)=>b.wins-a.wins).slice(0,5);
@@ -142,4 +144,4 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
+server.listen(PORT, () => console.log(`Server läuft auf ${PORT}`));
