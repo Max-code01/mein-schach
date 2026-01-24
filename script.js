@@ -29,7 +29,7 @@ let myColor = "white", onlineRoom = null;
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & SYSTEM (VOLLSTÄNDIG) ---
+// --- 2. CHAT & SYSTEM ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -52,7 +52,7 @@ function sendMsg() {
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
-// --- 3. SERVER EVENT HANDLING (VOLLSTÄNDIG) ---
+// --- 3. SERVER EVENT HANDLING ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
@@ -184,11 +184,26 @@ function resetGame() {
 }
 
 function doMove(fr, fc, tr, tc, emit = true) {
+    // History speichern für Undo
+    history.push(JSON.stringify({ b: board.map(row => [...row]), t: turn }));
+
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
-    if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
-    if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
+    // Bauern-Umwandlung Weiß
+    if (board[tr][tc] === 'P' && tr === 0) {
+        const choice = prompt("Umwandlung: Q (Dame), R (Turm), B (Läufer), N (Springer)", "Q") || "Q";
+        board[tr][tc] = choice.toUpperCase();
+    }
+    // Bauern-Umwandlung Schwarz
+    if (board[tr][tc] === 'p' && tr === 7) {
+        if (gameModeSelect.value === "bot") {
+            board[tr][tc] = 'q'; // Bot nimmt immer Dame
+        } else {
+            const choice = prompt("Umwandlung: q (Dame), r (Turm), b (Läufer), n (Springer)", "q") || "q";
+            board[tr][tc] = choice.toLowerCase();
+        }
+    }
 
     if (emit && socket.readyState === 1 && gameModeSelect.value !== "local") {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
@@ -248,7 +263,26 @@ function draw() {
     });
 }
 
-document.getElementById("undoBtn").onclick = () => { /* Undo Logik */ };
+document.getElementById("undoBtn").onclick = () => {
+    if (history.length === 0) return;
+    
+    // Letzten Stand wiederherstellen
+    const lastState = JSON.parse(history.pop());
+    board = lastState.b;
+    turn = lastState.t;
+
+    // Im Bot-Modus müssen wir 2 Schritte zurück (Spieler + Bot)
+    if (gameModeSelect.value === "bot" && history.length > 0) {
+        const playerState = JSON.parse(history.pop());
+        board = playerState.b;
+        turn = playerState.t;
+    }
+
+    selected = null;
+    statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
+    draw();
+};
+
 document.getElementById("resetBtn").onclick = resetGame;
 document.getElementById("resignBtn").onclick = () => {
     addChat("System", "Spiel aufgegeben.", "system");
