@@ -4,14 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
-    <title>Schach Live - Multiplayer</title>
+    <title>Schach Live - Pro</title>
 </head>
 <body>
 
     <div class="game-container">
-        
         <div class="board-section">
-            <h2 id="status-display">Lade Spiel...</h2>
+            <h2 id="status-display">Weiß am Zug</h2>
             <div id="chess-board"></div>
             
             <div class="control-row">
@@ -19,10 +18,20 @@
                 <button id="resetBtn">🆕 Neues Spiel</button>
                 <button id="resignBtn">🚩 Aufgeben</button>
             </div>
+
+            <div class="glass-panel" style="margin-top: 15px; display: flex; gap: 15px; justify-content: center;">
+                <div>
+                    <label>Helle Felder: </label>
+                    <input type="color" id="colorWhite" value="#ffffff">
+                </div>
+                <div>
+                    <label>Dunkle Felder: </label>
+                    <input type="color" id="colorBlack" value="#b58863">
+                </div>
+            </div>
         </div>
 
         <div class="sidebar">
-            
             <div class="glass-panel">
                 <div class="user-info">
                     <span>👤 <strong>Spieler-Profil</strong></span>
@@ -36,21 +45,19 @@
                     <span>🎮 <strong>Spielmodus</strong></span>
                     <select id="gameMode">
                         <option value="local">Lokal (2 Spieler)</option>
-                        <option value="bot">Gegen den Bot (Smart)</option>
-                        <option value="random">Zufälliger Gegner (Suche)</option>
+                        <option value="bot">Gegen Bot (Smart)</option>
+                        <option value="random" selected>Zufälliger Gegner</option>
                         <option value="online">Privater Raum</option>
                     </select>
                 </div>
                 <div class="room-controls">
-                    <input type="text" id="roomID" placeholder="Raum ID (z.B. 111)">
+                    <input type="text" id="roomID" placeholder="Raum ID">
                     <button id="connectMP">Beitreten</button>
                 </div>
             </div>
 
             <div id="chat-container">
-                <div id="chat-messages">
-                    <div class="msg system-msg">⚙️ Willkommen bei Schach Live!</div>
-                </div>
+                <div id="chat-messages"></div>
                 <div class="chat-input-area">
                     <div class="emoji-bar">
                         <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
@@ -65,12 +72,8 @@
             </div>
 
             <div class="glass-panel">
-                <div class="leaderboard-header">
-                    <span>🏆 <strong>Beste Spieler</strong></span>
-                </div>
-                <div id="leaderboard-list">
-                    <div style="color: gray; font-size: 0.8em; padding: 5px;">Lade Rangliste...</div>
-                    </div>
+                <span>🏆 <strong>Beste Spieler</strong></span>
+                <div id="leaderboard-list"></div>
             </div>
         </div>
     </div>
