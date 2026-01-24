@@ -4,11 +4,8 @@ const chatMessages = document.getElementById("chat-messages");
 const chatInput = document.getElementById("chat-input");
 const gameModeSelect = document.getElementById("gameMode");
 const nameInput = document.getElementById("playerName");
-const leaderboardEl = document.getElementById("leaderboard-list");
-const cpW = document.getElementById("colorWhite");
-const cpB = document.getElementById("colorBlack");
 
-// --- 1. SETUP ---
+// --- 1. KONFIGURATION ---
 let stockfishWorker = new Worker('engineWorker.js'); 
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
@@ -29,10 +26,11 @@ const PIECES = {
 
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
+let possibleMoves = []; // NEU: Für die Anzeige der Punkte
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & FARBEN ---
+// --- 2. CHAT & SYSTEM ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -41,44 +39,74 @@ function addChat(sender, text, type) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-cpW.oninput = draw;
-cpB.oninput = draw;
+document.querySelectorAll('.emoji-btn').forEach(b => {
+    b.onclick = () => { chatInput.value += b.textContent; chatInput.focus(); };
+});
 
-document.querySelectorAll('.emoji-btn').forEach(b => b.onclick = () => chatInput.value += b.textContent);
+function sendMsg() {
+    const t = chatInput.value.trim();
+    if (t && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'chat', text: t, sender: getMyName(), room: onlineRoom }));
+        addChat("Ich", t, "me"); chatInput.value = "";
+    }
+}
+document.getElementById("send-chat").onclick = sendMsg;
+chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
-// --- 3. SERVER LOGIK ---
+// --- 3. SERVER EVENT HANDLING ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
         case 'join':
             onlineRoom = d.room;
-            myColor = d.color || "white";
-            myColor === "black" ? boardEl.classList.add("flipped") : boardEl.classList.remove("flipped");
-            addChat("System", `Gegner gefunden! Raum: ${d.room}. Du spielst ${myColor}.`, "system");
+            document.getElementById("roomID").value = d.room;
+            if (d.color) {
+                myColor = d.color;
+                myColor === "black" ? boardEl.classList.add("flipped") : boardEl.classList.remove("flipped");
+            }
+            addChat("System", d.systemMsg || `Raum ${d.room} verbunden.`, "system");
             resetGame();
             break;
         case 'move':
-            doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false);
+            if (gameModeSelect.value === "online" || gameModeSelect.value === "random") {
+                doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false);
+            }
             break;
         case 'chat':
             addChat(d.sender, d.text, "other");
             break;
         case 'user-count':
-            document.getElementById("user-counter").textContent = "Online: " + d.count + " ● Live";
+            document.getElementById("user-counter").textContent = "Online: " + d.count;
             break;
         case 'leaderboard':
-            if (leaderboardEl) {
-                leaderboardEl.innerHTML = d.list.map((p, i) => 
-                    `<div style="display:flex; justify-content:space-between; padding:3px; border-bottom:1px solid rgba(255,255,255,0.1)">
-                        <span>${i+1}. ${p.name}</span>
-                        <span style="color:#f1c40f">${p.wins} 🏆</span>
-                    </div>`).join('');
-            }
+            document.getElementById("leaderboard-list").innerHTML = d.list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
             break;
     }
 };
 
-// --- 4. SCHACH REGELN ---
+gameModeSelect.onchange = () => {
+    if (gameModeSelect.value === "random") {
+        addChat("System", "Suche läuft... 🎲", "system");
+        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
+    } else {
+        boardEl.classList.remove("flipped");
+        myColor = "white";
+    }
+};
+
+document.getElementById("connectMP").onclick = () => {
+    const r = document.getElementById("roomID").value || "global";
+    socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
+};
+
+// --- 4. REGELN & SCHACH-LOGIK ---
+
+function findKing(c) {
+    const target = (c === "white" ? "K" : "k");
+    for(let r=0; r<8; r++) for(let col=0; col<8; col++) if(board[r][col] === target) return {r, c: col};
+    return null;
+}
+
 function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
 
 function canMoveLogic(fr, fc, tr, tc, b = board) {
@@ -108,12 +136,6 @@ function canMoveLogic(fr, fc, tr, tc, b = board) {
     return false;
 }
 
-function findKing(c) {
-    const t = (c === "white" ? "K" : "k");
-    for(let r=0; r<8; r++) for(let col=0; col<8; col++) if(board[r][col] === t) return {r, c: col};
-    return null;
-}
-
 function isAttacked(tr, tc, attackerColor) {
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
         if(board[r][c] && isOwn(board[r][c], attackerColor) && canMoveLogic(r, c, tr, tc)) return true;
@@ -129,7 +151,19 @@ function isSafeMove(fr, fc, tr, tc) {
     return safe;
 }
 
-// --- 5. GAME OVER & WIN ---
+// NEU: Berechnet mögliche Felder
+function getPossibleMoves(r, c) {
+    let moves = [];
+    for (let tr = 0; tr < 8; tr++) {
+        for (let tc = 0; tc < 8; tc++) {
+            if (canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) {
+                moves.push({tr, tc});
+            }
+        }
+    }
+    return moves;
+}
+
 function checkGameOver() {
     let moves = 0;
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
@@ -142,98 +176,16 @@ function checkGameOver() {
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
-            addChat("System", `SCHACHMATT! ${winner} hat gewonnen!`, "system");
-            if(socket.readyState === 1 && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
-                if((winner === "Weiß" && myColor === "white") || (winner === "Schwarz" && myColor === "black")) {
-                    socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
-                }
-            }
-        } else {
-            statusEl.textContent = "PATT!"; addChat("System", "Patt - Unentschieden.", "system");
+            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
+        } else { 
+            statusEl.textContent = "PATT! Unentschieden."; // Pattern-Erkennung (Patt)
         }
         return true;
     }
     return false;
 }
 
-// --- 6. MOVES & UNDO ---
-function doMove(fr, fc, tr, tc, emit = true) {
-    // History speichern für Zurücktaste
-    history.push(JSON.stringify({ b: board.map(r => [...r]), t: turn }));
-
-    const isCap = board[tr][tc] !== "";
-    board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
-    if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
-    if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
-
-    if (emit && socket.readyState === 1 && (gameModeSelect.value !== "local" && gameModeSelect.value !== "bot")) {
-        socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
-    }
-
-    turn = (turn === "white" ? "black" : "white");
-    const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
-    if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
-    if(!checkGameOver()) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " im Schach!" : " am Zug");
-    draw();
-
-    if(turn === "black" && gameModeSelect.value === "bot") {
-        stockfishWorker.postMessage({ board, turn: "black" });
-    }
-}
-
-document.getElementById("undoBtn").onclick = () => {
-    if (history.length > 0) {
-        const last = JSON.parse(history.pop());
-        board = last.b; turn = last.t; selected = null;
-        addChat("System", "Zug rückgängig gemacht. ↩️", "system");
-        draw();
-    }
-};
-
-document.getElementById("resetBtn").onclick = () => { addChat("System", "Neues Spiel.", "system"); resetGame(); };
-document.getElementById("resignBtn").onclick = () => { addChat("System", "Aufgegeben. 🚩", "system"); resetGame(); };
-
-document.getElementById("connectMP").onclick = () => {
-    const r = document.getElementById("roomID").value || "global";
-    addChat("System", `Suche Raum ${r}...`, "system");
-    socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
-};
-
-gameModeSelect.onchange = () => {
-    if(gameModeSelect.value === "random") {
-        addChat("System", "Suche läuft... 🎲", "system");
-        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
-    }
-};
-
-// --- 7. DARSTELLUNG ---
-function draw() {
-    boardEl.innerHTML = "";
-    board.forEach((row, r) => {
-        row.forEach((p, c) => {
-            const d = document.createElement("div");
-            d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
-            d.style.backgroundColor = (r + c) % 2 ? cpB.value : cpW.value;
-
-            if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
-            if(p) {
-                const img = document.createElement("img"); img.src = PIECES[p];
-                img.style.width = "85%"; d.appendChild(img);
-            }
-            d.onclick = () => {
-                if((gameModeSelect.value === "online" || gameModeSelect.value === "random") && turn !== myColor) return;
-                if(selected) {
-                    if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
-                        doMove(selected.r, selected.c, r, c);
-                        selected = null;
-                    } else { selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null; }
-                } else if(board[r][c] && isOwn(board[r][c])) { selected = {r, c}; }
-                draw();
-            };
-            boardEl.appendChild(d);
-        });
-    });
-}
+// --- 5. SPIEL-STEUERUNG ---
 
 function resetGame() {
     board = [
@@ -242,10 +194,125 @@ function resetGame() {
         ["","","","","","","",""], ["","","","","","","",""],
         ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
     ];
-    turn = "white"; selected = null; history = [];
+    turn = "white"; selected = null; history = []; possibleMoves = [];
     statusEl.textContent = "Weiß am Zug";
     draw();
 }
+
+function doMove(fr, fc, tr, tc, emit = true) {
+    history.push(JSON.stringify({ b: board.map(row => [...row]), t: turn }));
+
+    const isCap = board[tr][tc] !== "";
+    board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
+    
+    // Bauern-Umwandlung
+    if (board[tr][tc] === 'P' && tr === 0) {
+        const choice = prompt("Umwandlung: Q, R, B, N", "Q") || "Q";
+        board[tr][tc] = choice.toUpperCase();
+    }
+    if (board[tr][tc] === 'p' && tr === 7) {
+        if (gameModeSelect.value === "bot") board[tr][tc] = 'q';
+        else {
+            const choice = prompt("Umwandlung: q, r, b, n", "q") || "q";
+            board[tr][tc] = choice.toLowerCase();
+        }
+    }
+
+    if (emit && socket.readyState === 1 && gameModeSelect.value !== "local") {
+        socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
+    }
+
+    turn = (turn === "white" ? "black" : "white");
+    const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
+    
+    if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
+    
+    if(!checkGameOver()) {
+        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
+    }
+    possibleMoves = [];
+    draw();
+
+    if(turn === "black" && gameModeSelect.value === "bot") {
+        stockfishWorker.postMessage({ board, turn: "black" });
+    }
+}
+
+function draw() {
+    boardEl.innerHTML = "";
+    const k = findKing(turn);
+    const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
+
+    board.forEach((row, r) => {
+        row.forEach((p, c) => {
+            const d = document.createElement("div");
+            d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            
+            if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
+            if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
+            
+            // NEU: Punkt anzeigen
+            const isPossible = possibleMoves.some(m => m.tr === r && m.tc === c);
+            if (isPossible) {
+                const dot = document.createElement("div");
+                dot.className = "possible-move-dot";
+                if (board[r][c] !== "") dot.classList.add("capture-hint");
+                d.appendChild(dot);
+            }
+
+            if(p) {
+                const img = document.createElement("img"); img.src = PIECES[p];
+                img.style.width = "85%"; d.appendChild(img);
+            }
+            
+            d.onclick = () => {
+                const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
+                if(isOnline && turn !== myColor) return;
+
+                if(selected) {
+                    if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
+                        doMove(selected.r, selected.c, r, c);
+                        selected = null;
+                        possibleMoves = [];
+                    } else {
+                        if (board[r][c] && isOwn(board[r][c])) {
+                            selected = {r, c};
+                            possibleMoves = getPossibleMoves(r, c);
+                        } else {
+                            selected = null;
+                            possibleMoves = [];
+                        }
+                    }
+                } else if(board[r][c] && isOwn(board[r][c])) {
+                    if(isOnline && !isOwn(board[r][c], myColor)) return;
+                    selected = {r, c};
+                    possibleMoves = getPossibleMoves(r, c);
+                }
+                draw();
+            };
+            boardEl.appendChild(d);
+        });
+    });
+}
+
+document.getElementById("undoBtn").onclick = () => {
+    if (history.length === 0) return;
+    const lastState = JSON.parse(history.pop());
+    board = lastState.b; turn = lastState.t;
+    if (gameModeSelect.value === "bot" && history.length > 0) {
+        const pState = JSON.parse(history.pop());
+        board = pState.b; turn = pState.t;
+    }
+    selected = null; possibleMoves = [];
+    statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
+    draw();
+};
+
+document.getElementById("resetBtn").onclick = resetGame;
+document.getElementById("resignBtn").onclick = () => {
+    addChat("System", "Spiel aufgegeben.", "system");
+    resetGame();
+};
 
 stockfishWorker.onmessage = (e) => {
     if(e.data && turn === "black") setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600);
