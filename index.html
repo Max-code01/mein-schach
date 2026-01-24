@@ -6,10 +6,13 @@
     <title>Schach Live</title>
 </head>
 <body>
+
     <div class="game-container">
+        
         <div class="board-section">
             <h2 id="status-display">Weiß am Zug</h2>
             <div id="chess-board"></div>
+            
             <div class="control-row">
                 <button id="undoBtn">↩️ Rückgängig</button>
                 <button id="resetBtn">🆕 Neues Spiel</button>
@@ -18,11 +21,16 @@
         </div>
 
         <div class="sidebar">
+            
             <div class="glass-panel">
                 <div class="user-info" style="display: flex; flex-direction: column; gap: 8px;">
                     <span>👤 <strong>Spieler-Profil</strong></span>
                     <input type="text" id="playerName" placeholder="Dein Name...">
-                    <input type="password" id="playerPass" placeholder="Dein Passwort...">
+                    <input type="password" id="playerPass" placeholder="Passwort...">
+                    <button id="saveAccountBtn" style="background: var(--success); color: white; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                        🔒 Passwort sichern
+                    </button>
+                    <div id="save-status" style="font-size: 0.8em; text-align: center;"></div>
                 </div>
                 <div id="user-counter">Online: 1 ● Live</div>
             </div>
@@ -74,6 +82,7 @@
             </div>
         </div>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
