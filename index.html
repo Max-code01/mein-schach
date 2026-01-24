@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="style.css">
-    <title>Schach Live</title>
+    <title>Schach Live - Pro</title>
 </head>
 <body>
 
@@ -36,20 +36,22 @@
                     <input type="text" id="playerName" placeholder="Dein Name...">
                 </div>
                 <div id="user-counter">Online: 1 ● Live</div>
+                <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <span>🏅 <strong>Deine Erfolge:</strong></span>
+                    <div id="achievement-list" style="font-size: 1.5em; margin-top: 5px;"></div>
+                </div>
             </div>
 
             <div class="glass-panel">
-                <div class="mode-select">
-                    <span>🎮 <strong>Spielmodus</strong></span>
-                    <select id="gameMode">
-                        <option value="local">Lokal (2 Spieler am Gerät)</option>
-                        <option value="bot">Gegen den Bot (Smart)</option>
-                        <option value="random">Zufälliger Gegner (Suche)</option>
-                        <option value="online">Online (Privat)</option>
-                    </select>
-                </div>
-                <div class="room-controls">
-                    <input type="text" id="roomID" placeholder="Raum ID eingeben">
+                <span>🎮 <strong>Spielmodus</strong></span>
+                <select id="gameMode" style="width: 100%; margin-top: 5px;">
+                    <option value="local">Lokal (2 Spieler)</option>
+                    <option value="bot">Gegen den Bot</option>
+                    <option value="random">Zufälliger Gegner</option>
+                    <option value="online">Privat (Raum ID)</option>
+                </select>
+                <div class="room-controls" style="margin-top: 10px; display: flex; gap: 5px;">
+                    <input type="text" id="roomID" placeholder="Raum ID" style="flex: 1;">
                     <button id="connectMP">Beitreten</button>
                 </div>
             </div>
@@ -63,7 +65,7 @@
                         <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
                     </div>
                     <div style="display: flex; gap: 5px;">
-                        <input type="text" id="chat-input" placeholder="Nachricht schreiben...">
+                        <input type="text" id="chat-input" placeholder="Nachricht...">
                         <button id="send-chat">Senden</button>
                     </div>
                 </div>
