@@ -13,7 +13,6 @@ const wss = new WebSocket.Server({ server });
 const LB_FILE = './leaderboard.json';
 let leaderboard = {};
 
-// Beim Start: Bestehende Daten laden
 if (fs.existsSync(LB_FILE)) {
     try {
         const data = fs.readFileSync(LB_FILE, 'utf8');
@@ -25,7 +24,6 @@ if (fs.existsSync(LB_FILE)) {
     }
 }
 
-// Funktion zum Speichern auf die Festplatte
 function saveLeaderboard() {
     try {
         fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
@@ -36,23 +34,28 @@ function saveLeaderboard() {
 
 let waitingPlayer = null;
 
+// HILFSFUNKTION FÜR SYSTEM-NACHRICHTEN
+function broadcastSystemMsg(text) {
+    const msg = JSON.stringify({ type: 'chat', text: text, sender: 'System', system: true });
+    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+}
+
 wss.on('connection', (ws) => {
-    // Sofort das aktuelle Leaderboard an den neuen Spieler senden
     sendLeaderboard(ws);
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // 1. SIEG SPEICHERN (Permanent)
+            // 1. SIEG SPEICHERN
             if (data.type === 'win') {
                 const name = data.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
-                saveLeaderboard(); // In Datei schreiben
-                broadcastLeaderboard(); // Alle informieren
+                saveLeaderboard();
+                broadcastLeaderboard();
             }
 
-            // 2. MATCHMAKING (Random Player)
+            // 2. MATCHMAKING
             if (data.type === 'find_random') {
                 if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
                     const roomID = "random_" + Math.random();
@@ -65,15 +68,41 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // 3. NORMALE WEITERLEITUNG (Chat, Move, Join)
+            // 3. JOIN LOGIK (Wichtig: Name am Socket speichern!)
             if (data.type === 'join' && !data.type.startsWith('find_')) {
                 ws.room = data.room;
-                ws.playerName = data.name;
+                ws.playerName = data.name; // Hier speichern wir den Namen für den Kick-Befehl
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
-            // Nachrichten nur an Leute im gleichen Raum senden
-            if (data.type === 'chat' || data.type === 'move') {
+            // 4. CHAT MIT ADMIN-BEFEHLEN
+            if (data.type === 'chat') {
+                const adminPass = "geheim123"; // DEIN PASSWORT
+
+                if (data.text.startsWith('/kick ')) {
+                    const parts = data.text.split(' ');
+                    const target = parts[1];
+                    const pass = parts[2];
+
+                    if (pass === adminPass) {
+                        wss.clients.forEach(client => {
+                            if (client.playerName === target) {
+                                client.send(JSON.stringify({ type: 'chat', text: 'Du wurdest gekickt!', sender: 'SYSTEM' }));
+                                client.terminate(); // Kick!
+                            }
+                        });
+                        broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
+                        return; // Nachricht nicht normal weiterleiten
+                    }
+                } 
+                
+                if (data.text.startsWith('/clear ') && data.text.includes(adminPass)) {
+                    // Chat leeren (einfach viele Leerzeichen an alle senden)
+                    wss.clients.forEach(c => c.send(JSON.stringify({ type: 'chat', text: '<br>'.repeat(50) + 'Chat wurde geleert.', sender: 'SYSTEM' })));
+                    return;
+                }
+
+                // Normaler Chat-Broadcast
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
                         client.send(JSON.stringify(data));
@@ -81,7 +110,15 @@ wss.on('connection', (ws) => {
                 });
             }
 
-            // User-Counter an alle senden
+            // 5. ZÜGE WEITERLEITEN
+            if (data.type === 'move') {
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
+                        client.send(JSON.stringify(data));
+                    }
+                });
+            }
+
             broadcastUserCount();
 
         } catch (e) { console.error("Server Error:", e); }
@@ -93,7 +130,6 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Hilfsfunktionen
 function broadcastLeaderboard() {
     const list = Object.entries(leaderboard)
         .map(([name, wins]) => ({ name, wins }))
