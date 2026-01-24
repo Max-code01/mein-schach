@@ -14,7 +14,7 @@ body {
 
 .game-container { display: flex; gap: 30px; padding: 20px; max-width: 1300px; width: 100%; }
 
-/* Schachbrett Design */
+/* Schachbrett Design - DEINE ORIGINALEN FARBEN */
 #chess-board { 
     display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); 
     border: 10px solid #222; border-radius: 8px;
@@ -22,29 +22,25 @@ body {
     transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
-#chess-board.flipped { transform: rotate(180deg); }
-#chess-board.flipped img { transform: rotate(180deg); }
+.flipped { transform: rotate(180deg); }
+.flipped .square img { transform: rotate(180deg); }
 
 .square { 
     width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; 
-    cursor: pointer; position: relative; transition: all 0.2s;
+    cursor: pointer; position: relative; 
 }
 
-.white-sq { background: #dee3e6; }
-.black-sq { background: #8ca2ad; }
+/* Deine braunen Original-Farben */
+.white-sq { background-color: #f0d9b5; }
+.black-sq { background-color: #b58863; }
 
-.selected { background: #f1c40f !important; box-shadow: inset 0 0 15px rgba(0,0,0,0.3); }
-.in-check { background: #e74c3c !important; animation: pulse 1s infinite; }
+.selected { background-color: rgba(255, 255, 0, 0.5) !important; box-shadow: inset 0 0 15px rgba(255, 255, 0, 0.8); }
+.in-check { background-color: rgba(255, 0, 0, 0.6) !important; animation: pulse-red 1s infinite; }
 
-@keyframes pulse {
-    0% { box-shadow: inset 0 0 10px #c0392b; }
-    50% { box-shadow: inset 0 0 30px #e74c3c; }
-    100% { box-shadow: inset 0 0 10px #c0392b; }
-}
+@keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-/* Sidebar & Panels */
-.sidebar { width: 320px; display: flex; flex-direction: column; gap: 20px; }
-
+/* Sidebar & Glassmorphism */
+.sidebar { width: 420px; display: flex; flex-direction: column; gap: 15px; }
 .glass-panel { 
     background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(15px);
     border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 15px;
@@ -61,51 +57,34 @@ body {
 .msg { padding: 8px 14px; border-radius: 12px; font-size: 0.9em; max-width: 85%; animation: fadeIn 0.3s ease; }
 .my-msg { align-self: flex-end; background: var(--primary); color: white; }
 .other-msg { align-self: flex-start; background: #333; }
-.system-msg { align-self: center; background: rgba(241, 196, 15, 0.1); color: var(--warning); font-size: 0.8em; border: 1px solid rgba(241, 196, 15, 0.2); }
+.system-msg { align-self: center; background: rgba(241, 196, 15, 0.1); color: var(--warning); border: 1px solid var(--warning); width: 90%; text-align: center; font-size: 0.8em; }
 
-@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
-.chat-input-area { padding: 10px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.05); }
-.emoji-bar { display: flex; gap: 8px; margin-bottom: 8px; }
-.emoji-btn { cursor: pointer; filter: grayscale(0.5); transition: 0.2s; }
-.emoji-btn:hover { filter: grayscale(0); transform: scale(1.2); }
-
-input, select, button {
-    background: #222; border: 1px solid #444; color: white; padding: 8px 12px; border-radius: 6px; outline: none;
+input, select, button { 
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); 
+    color: white; padding: 10px; border-radius: 8px; transition: 0.2s;
 }
-
-button { background: var(--primary); cursor: pointer; border: none; font-weight: bold; transition: 0.3s; }
-button:hover { opacity: 0.8; transform: translateY(-2px); }
-#resetBtn { background: #444; }
+button { cursor: pointer; font-weight: bold; border: none; }
+button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+#send-chat { background: var(--success); }
+.control-row { display: flex; gap: 10px; margin-top: 15px; }
+.control-row button { flex: 1; }
 #resignBtn { background: var(--danger); }
 
-.control-row { display: flex; gap: 10px; margin-top: 20px; justify-content: center; }
-
-/* ---------------------------------------------------------
-   AB HIER: NEUE HINZUGEFÜGTE STYLES FÜR ZUG-HINTS
-   (Nichts oben wurde verändert)
-   --------------------------------------------------------- */
-
+/* NEU: ZUG-HINTS (Punkte auf dem Feld) */
 .possible-move-dot {
     width: 18px;
     height: 18px;
-    background: rgba(0, 0, 0, 0.15); /* Dezenter grauer Punkt */
+    background: rgba(0, 0, 0, 0.2); /* Dezenter dunkler Punkt auf braun */
     border-radius: 50%;
     position: absolute;
     z-index: 5;
-    pointer-events: none; /* Man klickt durch den Punkt auf das Feld */
+    pointer-events: none;
 }
 
-/* Spezial-Stil für Schläge (ein großer Ring statt eines Punktes) */
 .possible-move-dot.capture-hint {
     width: 58px;
     height: 58px;
     background: transparent;
-    border: 4px solid rgba(0, 0, 0, 0.1);
+    border: 5px solid rgba(0, 0, 0, 0.15);
     border-radius: 50%;
-}
-
-/* Falls das Brett gedreht ist, dürfen die Punkte nicht verrutschen */
-#chess-board.flipped .possible-move-dot {
-    transform: rotate(180deg);
 }
