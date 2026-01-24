@@ -27,9 +27,19 @@ const PIECES = {
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
 
+// --- FARBWAHL LOGIK ---
+const cpWhite = document.getElementById("colorWhite");
+const cpBlack = document.getElementById("colorBlack");
+[cpWhite, cpBlack].forEach(cp => {
+    cp.oninput = () => {
+        document.documentElement.style.setProperty('--board-white', cpWhite.value);
+        document.documentElement.style.setProperty('--board-black', cpBlack.value);
+    };
+});
+
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & SYSTEM (VOLLSTÄNDIG) ---
+// --- 2. CHAT & SYSTEM ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -52,7 +62,7 @@ function sendMsg() {
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
-// --- 3. SERVER EVENT HANDLING (VOLLSTÄNDIG) ---
+// --- 3. SERVER EVENT HANDLING ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
@@ -184,6 +194,9 @@ function resetGame() {
 }
 
 function doMove(fr, fc, tr, tc, emit = true) {
+    // Speichere den aktuellen Zustand für Undo (VOR dem Zug)
+    history.push({ board: JSON.parse(JSON.stringify(board)), turn: turn });
+
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
@@ -214,6 +227,17 @@ function draw() {
     const k = findKing(turn);
     const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
 
+    let possibleMoves = [];
+    if (selected) {
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if (canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
+                    possibleMoves.push({r, c});
+                }
+            }
+        }
+    }
+
     board.forEach((row, r) => {
         row.forEach((p, c) => {
             const d = document.createElement("div");
@@ -221,34 +245,58 @@ function draw() {
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
             if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
             
+            if (possibleMoves.some(m => m.r === r && m.c === c)) {
+                const dot = document.createElement("div");
+                dot.className = "move-dot";
+                d.appendChild(dot);
+            }
+
             if(p) {
                 const img = document.createElement("img"); img.src = PIECES[p];
                 img.style.width = "85%"; d.appendChild(img);
             }
             
-            d.onclick = () => {
-                const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
-                if(isOnline && turn !== myColor) return;
-
-                if(selected) {
-                    if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
-                        doMove(selected.r, selected.c, r, c);
-                        selected = null;
-                    } else {
-                        selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null;
-                    }
-                } else if(board[r][c] && isOwn(board[r][c])) {
-                    if(isOnline && !isOwn(board[r][c], myColor)) return;
-                    selected = {r, c};
-                }
-                draw();
-            };
+            d.onclick = () => handleSquareClick(r, c);
             boardEl.appendChild(d);
         });
     });
 }
 
-document.getElementById("undoBtn").onclick = () => { /* Undo Logik */ };
+function handleSquareClick(r, c) {
+    const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
+    if(isOnline && turn !== myColor) return;
+
+    if(selected) {
+        if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
+            let piece = board[selected.r][selected.c];
+            if (piece.toLowerCase() === 'p' && (r === 0 || r === 7)) {
+                let choice = prompt("Bauernumwandlung! Wähle: Q (Dame), R (Turm), B (Läufer), N (Springer)", "Q") || "Q";
+                choice = choice.toUpperCase();
+                if (!['Q','R','B','N'].includes(choice)) choice = 'Q';
+                board[selected.r][selected.c] = (piece === 'P') ? choice : choice.toLowerCase();
+            }
+            doMove(selected.r, selected.c, r, c);
+            selected = null;
+        } else {
+            selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null;
+        }
+    } else if(board[r][c] && isOwn(board[r][c])) {
+        if(isOnline && !isOwn(board[r][c], myColor)) return;
+        selected = {r, c};
+    }
+    draw();
+}
+
+document.getElementById("undoBtn").onclick = () => { 
+    if (history.length > 0) {
+        const lastState = history.pop();
+        board = lastState.board;
+        turn = lastState.turn;
+        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
+        draw();
+    }
+};
+
 document.getElementById("resetBtn").onclick = resetGame;
 document.getElementById("resignBtn").onclick = () => {
     addChat("System", "Spiel aufgegeben.", "system");
