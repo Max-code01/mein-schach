@@ -2,8 +2,9 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
-    <title>Schach Live - Pro</title>
+    <title>Schach Live - Vollversion</title>
 </head>
 <body>
 
@@ -19,11 +20,17 @@
                 <button id="resignBtn">🚩 Aufgeben</button>
             </div>
 
-            <div class="glass-panel" style="margin-top: 15px;">
-                <span>🎨 <strong>Brett-Farben</strong></span>
-                <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <label>Hell: <input type="color" id="colorWhite" value="#f0d9b5"></label>
-                    <label>Dunkel: <input type="color" id="colorBlack" value="#b58863"></label>
+            <div class="glass-panel" style="margin-top: 20px;">
+                <span>🎨 <strong>Brett-Farben anpassen</strong></span>
+                <div style="display: flex; gap: 15px; margin-top: 10px;">
+                    <div>
+                        <label>Hell:</label>
+                        <input type="color" id="colorWhite" value="#f0d9b5">
+                    </div>
+                    <div>
+                        <label>Dunkel:</label>
+                        <input type="color" id="colorBlack" value="#b58863">
+                    </div>
                 </div>
             </div>
         </div>
@@ -31,26 +38,25 @@
         <div class="sidebar">
             
             <div class="glass-panel">
-                <div class="user-info">
-                    <span>👤 <strong>Spieler-Profil</strong></span>
-                    <input type="text" id="playerName" placeholder="Dein Name...">
-                </div>
+                <span>👤 <strong>Spieler-Profil</strong></span>
+                <input type="text" id="playerName" placeholder="Dein Name..." style="width: 90%; margin: 10px 0;">
                 <div id="user-counter">Online: 1 ● Live</div>
-                <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                
+                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
                     <span>🏅 <strong>Deine Erfolge:</strong></span>
-                    <div id="achievement-list" style="font-size: 1.5em; margin-top: 5px;"></div>
+                    <div id="achievement-list" style="font-size: 1.8em; margin-top: 5px; min-height: 40px;"></div>
                 </div>
             </div>
 
             <div class="glass-panel">
                 <span>🎮 <strong>Spielmodus</strong></span>
-                <select id="gameMode" style="width: 100%; margin-top: 5px;">
+                <select id="gameMode" style="width: 100%; margin: 10px 0;">
                     <option value="local">Lokal (2 Spieler)</option>
                     <option value="bot">Gegen den Bot</option>
                     <option value="random">Zufälliger Gegner</option>
-                    <option value="online">Privat (Raum ID)</option>
+                    <option value="online">Online (Privat)</option>
                 </select>
-                <div class="room-controls" style="margin-top: 10px; display: flex; gap: 5px;">
+                <div style="display: flex; gap: 5px;">
                     <input type="text" id="roomID" placeholder="Raum ID" style="flex: 1;">
                     <button id="connectMP">Beitreten</button>
                 </div>
@@ -65,15 +71,15 @@
                         <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
                     </div>
                     <div style="display: flex; gap: 5px;">
-                        <input type="text" id="chat-input" placeholder="Nachricht...">
+                        <input type="text" id="chat-input" placeholder="Schreiben...">
                         <button id="send-chat">Senden</button>
                     </div>
                 </div>
             </div>
 
             <div class="glass-panel">
-                <span>🏆 <strong>Beste Spieler</strong></span>
-                <div id="leaderboard-list"></div>
+                <span>🏆 <strong>Leaderboard</strong></span>
+                <div id="leaderboard-list" style="margin-top: 10px; font-size: 0.9em;"></div>
             </div>
         </div>
     </div>
