@@ -26,6 +26,7 @@ const PIECES = {
 
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
+let possibleMoves = []; // NEU: Für die Anzeige der Punkte
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
@@ -150,6 +151,19 @@ function isSafeMove(fr, fc, tr, tc) {
     return safe;
 }
 
+// NEU: Berechnet mögliche Felder
+function getPossibleMoves(r, c) {
+    let moves = [];
+    for (let tr = 0; tr < 8; tr++) {
+        for (let tc = 0; tc < 8; tc++) {
+            if (canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) {
+                moves.push({tr, tc});
+            }
+        }
+    }
+    return moves;
+}
+
 function checkGameOver() {
     let moves = 0;
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
@@ -163,7 +177,9 @@ function checkGameOver() {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
             if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
-        } else { statusEl.textContent = "PATT! Unentschieden."; }
+        } else { 
+            statusEl.textContent = "PATT! Unentschieden."; // Pattern-Erkennung (Patt)
+        }
         return true;
     }
     return false;
@@ -178,29 +194,26 @@ function resetGame() {
         ["","","","","","","",""], ["","","","","","","",""],
         ["P","P","P","P","P","P","P","P"], ["R","N","B","Q","K","B","N","R"]
     ];
-    turn = "white"; selected = null; history = [];
+    turn = "white"; selected = null; history = []; possibleMoves = [];
     statusEl.textContent = "Weiß am Zug";
     draw();
 }
 
 function doMove(fr, fc, tr, tc, emit = true) {
-    // History speichern für Undo
     history.push(JSON.stringify({ b: board.map(row => [...row]), t: turn }));
 
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
-    // Bauern-Umwandlung Weiß
+    // Bauern-Umwandlung
     if (board[tr][tc] === 'P' && tr === 0) {
-        const choice = prompt("Umwandlung: Q (Dame), R (Turm), B (Läufer), N (Springer)", "Q") || "Q";
+        const choice = prompt("Umwandlung: Q, R, B, N", "Q") || "Q";
         board[tr][tc] = choice.toUpperCase();
     }
-    // Bauern-Umwandlung Schwarz
     if (board[tr][tc] === 'p' && tr === 7) {
-        if (gameModeSelect.value === "bot") {
-            board[tr][tc] = 'q'; // Bot nimmt immer Dame
-        } else {
-            const choice = prompt("Umwandlung: q (Dame), r (Turm), b (Läufer), n (Springer)", "q") || "q";
+        if (gameModeSelect.value === "bot") board[tr][tc] = 'q';
+        else {
+            const choice = prompt("Umwandlung: q, r, b, n", "q") || "q";
             board[tr][tc] = choice.toLowerCase();
         }
     }
@@ -217,6 +230,7 @@ function doMove(fr, fc, tr, tc, emit = true) {
     if(!checkGameOver()) {
         statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
     }
+    possibleMoves = [];
     draw();
 
     if(turn === "black" && gameModeSelect.value === "bot") {
@@ -233,9 +247,19 @@ function draw() {
         row.forEach((p, c) => {
             const d = document.createElement("div");
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
             if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
             
+            // NEU: Punkt anzeigen
+            const isPossible = possibleMoves.some(m => m.tr === r && m.tc === c);
+            if (isPossible) {
+                const dot = document.createElement("div");
+                dot.className = "possible-move-dot";
+                if (board[r][c] !== "") dot.classList.add("capture-hint");
+                d.appendChild(dot);
+            }
+
             if(p) {
                 const img = document.createElement("img"); img.src = PIECES[p];
                 img.style.width = "85%"; d.appendChild(img);
@@ -249,12 +273,20 @@ function draw() {
                     if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
                         doMove(selected.r, selected.c, r, c);
                         selected = null;
+                        possibleMoves = [];
                     } else {
-                        selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null;
+                        if (board[r][c] && isOwn(board[r][c])) {
+                            selected = {r, c};
+                            possibleMoves = getPossibleMoves(r, c);
+                        } else {
+                            selected = null;
+                            possibleMoves = [];
+                        }
                     }
                 } else if(board[r][c] && isOwn(board[r][c])) {
                     if(isOnline && !isOwn(board[r][c], myColor)) return;
                     selected = {r, c};
+                    possibleMoves = getPossibleMoves(r, c);
                 }
                 draw();
             };
@@ -265,20 +297,13 @@ function draw() {
 
 document.getElementById("undoBtn").onclick = () => {
     if (history.length === 0) return;
-    
-    // Letzten Stand wiederherstellen
     const lastState = JSON.parse(history.pop());
-    board = lastState.b;
-    turn = lastState.t;
-
-    // Im Bot-Modus müssen wir 2 Schritte zurück (Spieler + Bot)
+    board = lastState.b; turn = lastState.t;
     if (gameModeSelect.value === "bot" && history.length > 0) {
-        const playerState = JSON.parse(history.pop());
-        board = playerState.b;
-        turn = playerState.t;
+        const pState = JSON.parse(history.pop());
+        board = pState.b; turn = pState.t;
     }
-
-    selected = null;
+    selected = null; possibleMoves = [];
     statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
     draw();
 };
