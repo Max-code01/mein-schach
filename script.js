@@ -5,8 +5,10 @@ const chatInput = document.getElementById("chat-input");
 const gameModeSelect = document.getElementById("gameMode");
 const nameInput = document.getElementById("playerName");
 const leaderboardEl = document.getElementById("leaderboard-list");
+const cpW = document.getElementById("colorWhite");
+const cpB = document.getElementById("colorBlack");
 
-// --- 1. KONFIGURATION ---
+// --- 1. SETUP ---
 let stockfishWorker = new Worker('engineWorker.js'); 
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
@@ -28,11 +30,9 @@ const PIECES = {
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
 
-function getMyName() { 
-    return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); 
-}
+function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & SYSTEM-NACHRICHTEN ---
+// --- 2. CHAT & FARBEN ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -41,31 +41,20 @@ function addChat(sender, text, type) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Emojis hinzufügen
-document.querySelectorAll('.emoji-btn').forEach(btn => {
-    btn.onclick = () => { chatInput.value += btn.textContent; chatInput.focus(); };
-});
+cpW.oninput = draw;
+cpB.oninput = draw;
 
-function sendMsg() {
-    const t = chatInput.value.trim();
-    if (t && socket.readyState === 1) {
-        socket.send(JSON.stringify({ type: 'chat', text: t, sender: getMyName(), room: onlineRoom }));
-        addChat("Ich", t, "me"); chatInput.value = "";
-    }
-}
-document.getElementById("send-chat").onclick = sendMsg;
-chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
+document.querySelectorAll('.emoji-btn').forEach(b => b.onclick = () => chatInput.value += b.textContent);
 
-// --- 3. SERVER LOGIK (LEADERBOARD & EVENTS) ---
+// --- 3. SERVER LOGIK ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
         case 'join':
             onlineRoom = d.room;
-            document.getElementById("roomID").value = d.room;
             myColor = d.color || "white";
             myColor === "black" ? boardEl.classList.add("flipped") : boardEl.classList.remove("flipped");
-            addChat("System", `Gegner gefunden! Raum: ${d.room}. Du spielst ${myColor === "white"?"Weiß":"Schwarz"}.`, "system");
+            addChat("System", `Gegner gefunden! Raum: ${d.room}. Du spielst ${myColor}.`, "system");
             resetGame();
             break;
         case 'move':
@@ -80,7 +69,7 @@ socket.onmessage = (e) => {
         case 'leaderboard':
             if (leaderboardEl) {
                 leaderboardEl.innerHTML = d.list.map((p, i) => 
-                    `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.05)">
+                    `<div style="display:flex; justify-content:space-between; padding:3px; border-bottom:1px solid rgba(255,255,255,0.1)">
                         <span>${i+1}. ${p.name}</span>
                         <span style="color:#f1c40f">${p.wins} 🏆</span>
                     </div>`).join('');
@@ -89,7 +78,7 @@ socket.onmessage = (e) => {
     }
 };
 
-// --- 4. SCHACH LOGIK (KOMPLETT) ---
+// --- 4. SCHACH REGELN ---
 function isOwn(p, c = turn) { return p && (c === "white" ? p === p.toUpperCase() : p === p.toLowerCase()); }
 
 function canMoveLogic(fr, fc, tr, tc, b = board) {
@@ -140,7 +129,7 @@ function isSafeMove(fr, fc, tr, tc) {
     return safe;
 }
 
-// --- 5. GAME OVER & SIEGE ---
+// --- 5. GAME OVER & WIN ---
 function checkGameOver() {
     let moves = 0;
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
@@ -154,46 +143,37 @@ function checkGameOver() {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
             addChat("System", `SCHACHMATT! ${winner} hat gewonnen!`, "system");
-            
-            // Siegmeldung an den Server
             if(socket.readyState === 1 && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
                 if((winner === "Weiß" && myColor === "white") || (winner === "Schwarz" && myColor === "black")) {
                     socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
                 }
             }
         } else {
-            statusEl.textContent = "PATT!";
-            addChat("System", "Unentschieden durch Patt.", "system");
+            statusEl.textContent = "PATT!"; addChat("System", "Patt - Unentschieden.", "system");
         }
         return true;
     }
     return false;
 }
 
-// --- 6. SPIELZÜGE & HISTORY ---
+// --- 6. MOVES & UNDO ---
 function doMove(fr, fc, tr, tc, emit = true) {
-    // HISTORY SPEICHERN (Für Zurücktaste)
-    history.push(JSON.stringify({ b: board.map(row => [...row]), t: turn }));
+    // History speichern für Zurücktaste
+    history.push(JSON.stringify({ b: board.map(r => [...r]), t: turn }));
 
     const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
-    
-    // Umwandlung
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
     if(board[tr][tc] === 'p' && tr === 7) board[tr][tc] = 'q';
 
-    if (emit && socket.readyState === 1 && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
+    if (emit && socket.readyState === 1 && (gameModeSelect.value !== "local" && gameModeSelect.value !== "bot")) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
     }
 
     turn = (turn === "white" ? "black" : "white");
     const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
-    
     if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
-    
-    if(!checkGameOver()) {
-        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
-    }
+    if(!checkGameOver()) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " im Schach!" : " am Zug");
     draw();
 
     if(turn === "black" && gameModeSelect.value === "bot") {
@@ -201,33 +181,21 @@ function doMove(fr, fc, tr, tc, emit = true) {
     }
 }
 
-// --- 7. BUTTONS & STEUERUNG ---
 document.getElementById("undoBtn").onclick = () => {
     if (history.length > 0) {
         const last = JSON.parse(history.pop());
-        board = last.b;
-        turn = last.t;
-        selected = null;
+        board = last.b; turn = last.t; selected = null;
         addChat("System", "Zug rückgängig gemacht. ↩️", "system");
         draw();
-    } else {
-        addChat("System", "Keine Züge zum Rückgängig machen.", "system");
     }
 };
 
-document.getElementById("resetBtn").onclick = () => {
-    addChat("System", "Spiel wurde neu gestartet.", "system");
-    resetGame();
-};
-
-document.getElementById("resignBtn").onclick = () => {
-    addChat("System", "Du hast das Spiel aufgegeben. 🚩", "system");
-    resetGame();
-};
+document.getElementById("resetBtn").onclick = () => { addChat("System", "Neues Spiel.", "system"); resetGame(); };
+document.getElementById("resignBtn").onclick = () => { addChat("System", "Aufgegeben. 🚩", "system"); resetGame(); };
 
 document.getElementById("connectMP").onclick = () => {
     const r = document.getElementById("roomID").value || "global";
-    addChat("System", `Suche/Verbinde zu Raum ${r}...`, "system");
+    addChat("System", `Suche Raum ${r}...`, "system");
     socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
 };
 
@@ -235,38 +203,31 @@ gameModeSelect.onchange = () => {
     if(gameModeSelect.value === "random") {
         addChat("System", "Suche läuft... 🎲", "system");
         socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
-    } else if(gameModeSelect.value === "bot") {
-        addChat("System", "Bot-Modus aktiviert.", "system");
     }
 };
 
-// --- 8. DARSTELLUNG ---
+// --- 7. DARSTELLUNG ---
 function draw() {
     boardEl.innerHTML = "";
     board.forEach((row, r) => {
         row.forEach((p, c) => {
             const d = document.createElement("div");
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            d.style.backgroundColor = (r + c) % 2 ? cpB.value : cpW.value;
+
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
             if(p) {
                 const img = document.createElement("img"); img.src = PIECES[p];
                 img.style.width = "85%"; d.appendChild(img);
             }
             d.onclick = () => {
-                const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
-                if(isOnline && turn !== myColor) return;
-
+                if((gameModeSelect.value === "online" || gameModeSelect.value === "random") && turn !== myColor) return;
                 if(selected) {
                     if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
                         doMove(selected.r, selected.c, r, c);
                         selected = null;
-                    } else {
-                        selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null;
-                    }
-                } else if(board[r][c] && isOwn(board[r][c])) {
-                    if(isOnline && !isOwn(board[r][c], myColor)) return;
-                    selected = {r, c};
-                }
+                    } else { selected = (board[r][c] && isOwn(board[r][c])) ? {r, c} : null; }
+                } else if(board[r][c] && isOwn(board[r][c])) { selected = {r, c}; }
                 draw();
             };
             boardEl.appendChild(d);
@@ -290,5 +251,4 @@ stockfishWorker.onmessage = (e) => {
     if(e.data && turn === "black") setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600);
 };
 
-// Start
 resetGame();
