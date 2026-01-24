@@ -4,7 +4,7 @@ const fs = require('fs');
 
 const server = http.createServer((req, res) => { 
     res.writeHead(200); 
-    res.end("Schach-Server mit Admin-Mode und Nick-Schutz läuft!"); 
+    res.end("Schach-Server mit IP-Ban und Unban-Funktion läuft!"); 
 });
 const wss = new WebSocket.Server({ server });
 
@@ -14,11 +14,11 @@ const USER_FILE = './userDB.json';
 let leaderboard = {};
 let userDB = {}; 
 let bannedPlayers = new Set(); 
+let bannedIPs = new Set(); // NEU: Speicher für IP-Banns
 let mutedPlayers = new Set(); 
 
 const adminPass = "geheim123"; // Dein Admin-Passwort
 
-// Dateien laden
 if (fs.existsSync(LB_FILE)) {
     try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch (e) { leaderboard = {}; }
 }
@@ -27,11 +27,11 @@ if (fs.existsSync(USER_FILE)) {
 }
 
 function saveLeaderboard() {
-    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Fehler:", e); }
+    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Speicherfehler:", e); }
 }
 
 function saveUsers() {
-    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("Fehler:", e); }
+    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("User-Speicherfehler:", e); }
 }
 
 function broadcastSystemMsg(text) {
@@ -41,8 +41,12 @@ function broadcastSystemMsg(text) {
 
 let waitingPlayer = null;
 
-wss.on('connection', (ws) => {
-    // Leaderboard beim Start schicken
+wss.on('connection', (ws, req) => {
+    // IP-Adresse des Clients ermitteln
+    const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    ws.clientIP = clientIP;
+
+    // Leaderboard beim Connect schicken
     const list = Object.entries(leaderboard).map(([name, wins]) => ({ name, wins })).sort((a,b)=>b.wins-a.wins).slice(0,5);
     ws.send(JSON.stringify({ type: 'leaderboard', list }));
 
@@ -52,17 +56,24 @@ wss.on('connection', (ws) => {
             const inputName = (data.name || data.playerName || data.sender || "").trim();
             const inputPass = data.password || "";
 
+            // IP-CHECK: Sofort trennen, wenn IP gebannt ist
+            if (bannedIPs.has(ws.clientIP)) {
+                ws.send(JSON.stringify({ type: 'chat', text: 'DEINE IP IST GEBANNT!', sender: 'SYSTEM', system: true }));
+                ws.terminate();
+                return;
+            }
+
+            // SICHERHEITS-CHECK: Namen am Socket merken
+            if (inputName) ws.playerName = inputName;
+
             // --- NICKNAME-SCHUTZ LOGIK ---
             if (data.type === 'join' || data.type === 'find_random') {
                 if (inputName) {
                     if (!userDB[inputName]) {
                         userDB[inputName] = inputPass;
                         saveUsers();
-                        ws.playerName = inputName;
                     } else {
-                        if (userDB[inputName] === inputPass) {
-                            ws.playerName = inputName;
-                        } else {
+                        if (userDB[inputName] !== inputPass) {
                             ws.send(JSON.stringify({ type: 'chat', text: 'NICK GESCHÜTZT! Falsches Passwort.', sender: 'System', system: true }));
                             ws.terminate();
                             return;
@@ -71,7 +82,7 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // BAN-CHECK
+            // NAMEN-BAN-CHECK
             if (ws.playerName && bannedPlayers.has(ws.playerName)) {
                 ws.terminate();
                 return;
@@ -83,25 +94,50 @@ wss.on('connection', (ws) => {
                 const cmd = parts[0].toLowerCase();
                 const target = parts[1];
 
+                // KICK & BAN (mit IP)
                 if (cmd === '/kick' || cmd === '/ban') {
-                    if (cmd === '/ban') bannedPlayers.add(target);
+                    if (cmd === '/ban') {
+                        bannedPlayers.add(target);
+                    }
+                    
                     wss.clients.forEach(client => {
                         if (client.playerName === target) {
-                            client.send(JSON.stringify({ type: 'chat', text: 'Admin hat dich entfernt!', sender: 'SYSTEM' }));
+                            if (cmd === '/ban') bannedIPs.add(client.clientIP); // IP ebenfalls bannen
+                            client.send(JSON.stringify({ type: 'chat', text: 'Vom Admin entfernt!', sender: 'SYSTEM' }));
                             client.terminate();
                         }
                     });
                     broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
                     return;
                 }
+
+                // UNBAN (Name oder IP)
+                if (cmd === '/unban') {
+                    bannedPlayers.delete(target);
+                    bannedIPs.delete(target);
+                    broadcastSystemMsg(`Spieler/IP ${target} wurde freigeschaltet.`);
+                    return;
+                }
+
                 if (cmd === '/mute') {
                     mutedPlayers.add(target);
                     broadcastSystemMsg(`${target} wurde stummgeschaltet.`);
                     return;
                 }
+
+                if (cmd === '/wipe') {
+                    wss.clients.forEach(c => c.terminate());
+                    return;
+                }
             }
 
-            // --- DEINE BESTEHENDE LOGIK (UNGEKÜRZT) ---
+            // --- MUTE CHECK ---
+            if (data.type === 'chat' && mutedPlayers.has(ws.playerName)) {
+                ws.send(JSON.stringify({ type: 'chat', text: 'Du bist stummgeschaltet.', sender: 'System' }));
+                return;
+            }
+
+            // --- SPIEL LOGIK ---
             if (data.type === 'win') {
                 const name = data.name || ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
@@ -127,7 +163,6 @@ wss.on('connection', (ws) => {
             }
 
             if (data.type === 'chat' || data.type === 'move') {
-                if (data.type === 'chat' && mutedPlayers.has(ws.playerName)) return;
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
                         client.send(JSON.stringify(data));
@@ -135,13 +170,15 @@ wss.on('connection', (ws) => {
                 });
             }
 
+            // User-Count
             const countMsg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
             wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(countMsg); });
 
         } catch (e) { console.error("Error:", e); }
     });
+
     ws.on('close', () => { if(waitingPlayer === ws) waitingPlayer = null; });
 });
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server läuft auf ${PORT}`));
+server.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
