@@ -78,3 +78,27 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
 .control-row { display: flex; gap: 10px; margin-top: 15px; }
 .control-row button { flex: 1; }
 #resignBtn { background: var(--danger); }
+
+/* --- NEUE ADMIN & SYSTEM STYLES --- */
+.msg-admin {
+    align-self: center;
+    background: rgba(220, 53, 69, 0.15);
+    color: #ff4d4d;
+    border: 2px solid var(--danger);
+    font-weight: bold;
+    text-transform: uppercase;
+    width: 95%;
+    text-align: center;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+    animation: flash-admin 2s infinite;
+}
+
+@keyframes flash-admin {
+    0% { border-color: var(--danger); }
+    50% { border-color: #ff8080; }
+    100% { border-color: var(--danger); }
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
