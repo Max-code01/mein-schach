@@ -8,92 +8,59 @@
 
 body { 
     background: radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);
-    color: white; font-family: 'Segoe UI', Roboto, sans-serif; 
+    color: white; font-family: 'Segoe UI', sans-serif; 
     margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh;
 }
 
-.game-container { display: flex; gap: 30px; padding: 20px; max-width: 1300px; width: 100%; }
+.game-container { display: flex; gap: 25px; padding: 20px; max-width: 1200px; width: 100%; }
 
 #chess-board { 
     display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); 
-    border: 10px solid #222; border-radius: 8px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 20px rgba(0, 123, 255, 0.1);
-    transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    border: 8px solid #222; border-radius: 5px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.7);
 }
 
-.flipped { transform: rotate(180deg); }
-.flipped .square img { transform: rotate(180deg); }
-
-.square { 
-    width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; 
-    cursor: pointer; position: relative; 
-}
-
+.square { width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; cursor: pointer; position: relative; }
 .white-sq { background-color: #f0d9b5; }
 .black-sq { background-color: #b58863; }
 
-.selected { background-color: rgba(255, 255, 0, 0.5) !important; box-shadow: inset 0 0 15px rgba(255, 255, 0, 0.8); }
-.in-check { background-color: rgba(255, 0, 0, 0.6) !important; animation: pulse-red 1s infinite; }
+.selected { background-color: rgba(255, 255, 0, 0.5) !important; }
+.in-check { background-color: rgba(255, 0, 0, 0.6) !important; animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
-@keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+.possible-move-dot {
+    width: 16px; height: 16px; background: rgba(0,0,0,0.2); border-radius: 50%; pointer-events: none;
+}
+.capture-hint {
+    width: 55px; height: 55px; border: 4px solid rgba(0,0,0,0.1); background: transparent;
+}
 
-.sidebar { width: 420px; display: flex; flex-direction: column; gap: 15px; }
+.sidebar { width: 400px; display: flex; flex-direction: column; gap: 15px; }
 .glass-panel { 
-    background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 15px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); 
+    border-radius: 12px; padding: 15px;
 }
 
-#chat-container { 
-    height: 380px; background: rgba(0,0,0,0.4); border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);
-    display: flex; flex-direction: column; overflow: hidden;
-}
+#chat-container { height: 350px; display: flex; flex-direction: column; background: rgba(0,0,0,0.3); border-radius: 12px; overflow: hidden; }
+#chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
 
-#chat-messages { flex-grow: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
-
-.msg { padding: 8px 14px; border-radius: 12px; font-size: 0.9em; max-width: 85%; animation: fadeIn 0.3s ease; }
-.my-msg { align-self: flex-end; background: var(--primary); color: white; }
+.msg { padding: 6px 12px; border-radius: 10px; font-size: 0.9em; max-width: 85%; }
+.my-msg { align-self: flex-end; background: var(--primary); }
 .other-msg { align-self: flex-start; background: #333; }
 .system-msg { 
-    align-self: center; 
-    background: rgba(241, 196, 15, 0.1); 
-    color: var(--warning); 
-    border: 1px solid var(--warning); 
-    width: 90%; text-align: center; 
-    font-size: 0.8em;
-    font-weight: bold;
-    animation: achievementPop 0.5s ease-out;
+    align-self: center; background: rgba(241, 196, 15, 0.15); 
+    color: var(--warning); border: 1px solid var(--warning); 
+    font-weight: bold; width: 90%; text-align: center;
 }
 
-@keyframes achievementPop {
-    0% { transform: scale(0.8); opacity: 0; }
-    70% { transform: scale(1.1); }
-    100% { transform: scale(1); opacity: 1; }
-}
-
-input, select, button { 
-    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); 
-    color: white; padding: 10px; border-radius: 8px; transition: 0.2s;
-}
-button { cursor: pointer; font-weight: bold; border: none; }
-button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
-#send-chat { background: var(--success); }
-.control-row { display: flex; gap: 10px; margin-top: 15px; }
+input, select, button { background: #222; border: 1px solid #444; color: white; padding: 8px; border-radius: 5px; }
+button { cursor: pointer; transition: 0.2s; }
+button:hover { opacity: 0.8; }
+.control-row { display: flex; gap: 5px; margin-top: 10px; }
 .control-row button { flex: 1; }
+#undoBtn { background: #444; }
+#resetBtn { background: var(--success); }
 #resignBtn { background: var(--danger); }
 
-/* Zug-Punkte Styles */
-.possible-move-dot {
-    width: 18px; height: 18px;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 50%;
-    position: absolute;
-    z-index: 5;
-    pointer-events: none;
-}
-.possible-move-dot.capture-hint {
-    width: 58px; height: 58px;
-    background: transparent;
-    border: 5px solid rgba(0, 0, 0, 0.15);
-    border-radius: 50%;
-}
+.flipped { transform: rotate(180deg); }
+.flipped img { transform: rotate(180deg); }
