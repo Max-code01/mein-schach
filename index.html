@@ -18,6 +18,14 @@
                 <button id="resetBtn">🆕 Neues Spiel</button>
                 <button id="resignBtn">🚩 Aufgeben</button>
             </div>
+
+            <div class="glass-panel" style="margin-top: 15px;">
+                <span>🎨 <strong>Brett-Farben</strong></span>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <label>Hell: <input type="color" id="colorWhite" value="#f0d9b5"></label>
+                    <label>Dunkel: <input type="color" id="colorBlack" value="#b58863"></label>
+                </div>
+            </div>
         </div>
 
         <div class="sidebar">
@@ -63,8 +71,7 @@
 
             <div class="glass-panel">
                 <span>🏆 <strong>Beste Spieler</strong></span>
-                <div id="leaderboard-list">
-                    </div>
+                <div id="leaderboard-list"></div>
             </div>
         </div>
     </div>
