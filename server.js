@@ -2,107 +2,112 @@ const WebSocket = require('ws');
 const http = require('http');
 const fs = require('fs');
 
-const server = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("Schach-Server läuft!");
-});
-
+const server = http.createServer((req, res) => { res.writeHead(200); res.end("Schach-Server läuft!"); });
 const wss = new WebSocket.Server({ server });
 
-// --- PERMANENTE SPEICHERUNG SETUP ---
 const LB_FILE = './leaderboard.json';
 let leaderboard = {};
+let bannedPlayers = new Set(); // Hier speichern wir die Gebannten (bis zum Neustart)
 
+// Admin Passwort
+const adminPass = "geheim123";
+
+// Laden beim Start
 if (fs.existsSync(LB_FILE)) {
     try {
-        const data = fs.readFileSync(LB_FILE, 'utf8');
-        leaderboard = JSON.parse(data);
-        console.log("Leaderboard geladen.");
-    } catch (e) {
-        console.error("Fehler beim Laden des Leaderboards:", e);
-        leaderboard = {};
-    }
+        leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8'));
+    } catch (e) { leaderboard = {}; }
 }
 
 function saveLeaderboard() {
-    try {
-        fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
-    } catch (e) {
-        console.error("Fehler beim Speichern:", e);
-    }
+    fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
 }
 
-let waitingPlayer = null;
-
-// HILFSFUNKTION FÜR SYSTEM-NACHRICHTEN
 function broadcastSystemMsg(text) {
     const msg = JSON.stringify({ type: 'chat', text: text, sender: 'System', system: true });
     wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
 }
 
 wss.on('connection', (ws) => {
-    sendLeaderboard(ws);
+    // Leaderboard senden
+    const list = Object.entries(leaderboard).map(([name, wins]) => ({ name, wins })).sort((a,b)=>b.wins-a.wins).slice(0,5);
+    ws.send(JSON.stringify({ type: 'leaderboard', list }));
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // 1. SIEG SPEICHERN
+            // BAN-CHECK: Wenn der Name auf der Blacklist steht, sofort kicken
+            if (data.type === 'join' && bannedPlayers.has(data.name)) {
+                ws.send(JSON.stringify({ type: 'chat', text: 'DU BIST GEBANNT!', sender: 'SYSTEM' }));
+                ws.terminate();
+                return;
+            }
+
+            // JOIN LOGIK
+            if (data.type === 'join' && !data.type.startsWith('find_')) {
+                ws.room = data.room;
+                ws.playerName = data.name; // SEHR WICHTIG FÜR KICK
+                ws.send(JSON.stringify({ type: 'join', room: data.room }));
+            }
+
+            // ADMIN BEFEHLE
+            if (data.type === 'chat') {
+                // 1. KICK (Wirft raus)
+                if (data.text.startsWith('/kick ')) {
+                    const target = data.text.split(' ')[1];
+                    const pass = data.text.split(' ')[2];
+                    if (pass === adminPass) {
+                        wss.clients.forEach(client => {
+                            if (client.playerName === target) client.terminate();
+                        });
+                        broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
+                        return;
+                    }
+                }
+
+                // 2. BAN (Wirft raus und blockiert den Namen)
+                if (data.text.startsWith('/ban ')) {
+                    const target = data.text.split(' ')[1];
+                    const pass = data.text.split(' ')[2];
+                    if (pass === adminPass) {
+                        bannedPlayers.add(target);
+                        wss.clients.forEach(client => {
+                            if (client.playerName === target) client.terminate();
+                        });
+                        broadcastSystemMsg(`Spieler ${target} wurde PERMANENT GEBANNT.`);
+                        return;
+                    }
+                }
+
+                // 3. RESET LEADERBOARD (Löscht alle Siege)
+                if (data.text === `/resetall ${adminPass}`) {
+                    leaderboard = {};
+                    saveLeaderboard();
+                    const msg = JSON.stringify({ type: 'leaderboard', list: [] });
+                    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+                    broadcastSystemMsg(`Das Leaderboard wurde vom Admin gelöscht!`);
+                    return;
+                }
+                
+                // 4. CLEAR CHAT
+                if (data.text === `/clear ${adminPass}`) {
+                    const msg = JSON.stringify({ type: 'chat', text: '<br>'.repeat(60) + '--- Chat geleert ---', sender: 'SYSTEM' });
+                    wss.clients.forEach(c => c.send(msg));
+                    return;
+                }
+            }
+
+            // NORMALER WEITERLEITUNGS-CODE (Move, Win, Chat)
             if (data.type === 'win') {
                 const name = data.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
                 saveLeaderboard();
-                broadcastLeaderboard();
+                const list = Object.entries(leaderboard).map(([n, w]) => ({ name: n, wins: w })).sort((a,b)=>b.wins-a.wins).slice(0,5);
+                wss.clients.forEach(c => c.send(JSON.stringify({ type: 'leaderboard', list })));
             }
 
-            // 2. MATCHMAKING
-            if (data.type === 'find_random') {
-                if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
-                    const roomID = "random_" + Math.random();
-                    waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden! Du bist WEISS." }));
-                    ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden! Du bist SCHWARZ." }));
-                    waitingPlayer.room = roomID; ws.room = roomID;
-                    waitingPlayer = null;
-                } else {
-                    waitingPlayer = ws;
-                }
-            }
-
-            // 3. JOIN LOGIK (Wichtig: Name am Socket speichern!)
-            if (data.type === 'join' && !data.type.startsWith('find_')) {
-                ws.room = data.room;
-                ws.playerName = data.name; // Hier speichern wir den Namen für den Kick-Befehl
-                ws.send(JSON.stringify({ type: 'join', room: data.room }));
-            }
-
-            // 4. CHAT MIT ADMIN-BEFEHLEN
-            if (data.type === 'chat') {
-                const adminPass = "geheim123"; // DEIN PASSWORT
-
-                if (data.text.startsWith('/kick ')) {
-                    const parts = data.text.split(' ');
-                    const target = parts[1];
-                    const pass = parts[2];
-
-                    if (pass === adminPass) {
-                        wss.clients.forEach(client => {
-                            if (client.playerName === target) {
-                                client.send(JSON.stringify({ type: 'chat', text: 'Du wurdest gekickt!', sender: 'SYSTEM' }));
-                                client.terminate(); // Kick!
-                            }
-                        });
-                        broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
-                        return; // Nachricht nicht normal weiterleiten
-                    }
-                } 
-                
-                if (data.text.startsWith('/clear ') && data.text.includes(adminPass)) {
-                    // Chat leeren (einfach viele Leerzeichen an alle senden)
-                    wss.clients.forEach(c => c.send(JSON.stringify({ type: 'chat', text: '<br>'.repeat(50) + 'Chat wurde geleert.', sender: 'SYSTEM' })));
-                    return;
-                }
-
-                // Normaler Chat-Broadcast
+            if (data.type === 'chat' || data.type === 'move') {
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
                         client.send(JSON.stringify(data));
@@ -110,47 +115,9 @@ wss.on('connection', (ws) => {
                 });
             }
 
-            // 5. ZÜGE WEITERLEITEN
-            if (data.type === 'move') {
-                wss.clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
-                        client.send(JSON.stringify(data));
-                    }
-                });
-            }
-
-            broadcastUserCount();
-
-        } catch (e) { console.error("Server Error:", e); }
-    });
-
-    ws.on('close', () => {
-        if(waitingPlayer === ws) waitingPlayer = null;
-        broadcastUserCount();
+        } catch (e) { console.error(e); }
     });
 });
 
-function broadcastLeaderboard() {
-    const list = Object.entries(leaderboard)
-        .map(([name, wins]) => ({ name, wins }))
-        .sort((a, b) => b.wins - a.wins)
-        .slice(0, 5);
-    const msg = JSON.stringify({ type: 'leaderboard', list });
-    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
-}
-
-function sendLeaderboard(ws) {
-    const list = Object.entries(leaderboard)
-        .map(([name, wins]) => ({ name, wins }))
-        .sort((a, b) => b.wins - a.wins)
-        .slice(0, 5);
-    ws.send(JSON.stringify({ type: 'leaderboard', list }));
-}
-
-function broadcastUserCount() {
-    const msg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
-    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
-}
-
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
+server.listen(PORT, () => console.log(`Server läuft!`));
