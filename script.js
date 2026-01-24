@@ -7,7 +7,6 @@ const nameInput = document.getElementById("playerName");
 const passInput = document.getElementById("playerPass");
 const saveBtn = document.getElementById("saveAccountBtn");
 
-// --- 1. KONFIGURATION ---
 let stockfishWorker = new Worker('engineWorker.js'); 
 const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
 
@@ -36,7 +35,7 @@ window.addEventListener('load', () => {
     if (savedName && savedPass) {
         nameInput.value = savedName;
         passInput.value = savedPass;
-        document.getElementById("save-status").textContent = "✅ Passwort geladen";
+        document.getElementById("save-status").textContent = "✅ Daten geladen";
     }
 });
 
@@ -58,7 +57,6 @@ const cpBlack = document.getElementById("colorBlack");
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 function getMyPass() { return passInput.value; }
 
-// --- 2. CHAT & SYSTEM ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
@@ -81,7 +79,6 @@ function sendMsg() {
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
-// --- 3. SERVER EVENT HANDLING ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
@@ -116,9 +113,6 @@ gameModeSelect.onchange = () => {
     if (gameModeSelect.value === "random") {
         addChat("System", "Suche läuft... 🎲", "system");
         socket.send(JSON.stringify({ type: 'find_random', name: getMyName(), password: getMyPass() }));
-    } else {
-        boardEl.classList.remove("flipped");
-        myColor = "white";
     }
 };
 
@@ -127,7 +121,6 @@ document.getElementById("connectMP").onclick = () => {
     socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName(), password: getMyPass() }));
 };
 
-// --- 4. REGELN & SCHACH-LOGIK ---
 function findKing(c) {
     const target = (c === "white" ? "K" : "k");
     for(let r=0; r<8; r++) for(let col=0; col<8; col++) if(board[r][col] === target) return {r, c: col};
@@ -182,13 +175,12 @@ function checkGameOver() {
         if(board[r][c] && isOwn(board[r][c])) 
             for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) 
                 if(canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) moves++;
-
     if(moves === 0) {
         const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
-            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
+            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', name: getMyName() }));
         } else { statusEl.textContent = "PATT! Unentschieden."; }
         return true;
     }
@@ -219,13 +211,9 @@ function doMove(fr, fc, tr, tc, emit = true) {
     turn = (turn === "white" ? "black" : "white");
     const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
     if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
-    if(!checkGameOver()) {
-        statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
-    }
+    if(!checkGameOver()) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
     draw();
-    if(turn === "black" && gameModeSelect.value === "bot") {
-        stockfishWorker.postMessage({ board, turn: "black" });
-    }
+    if(turn === "black" && gameModeSelect.value === "bot") stockfishWorker.postMessage({ board, turn: "black" });
 }
 
 function draw() {
