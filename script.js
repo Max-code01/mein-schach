@@ -26,7 +26,23 @@ const PIECES = {
 
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
-let possibleMoves = []; // NEU: Für die Anzeige der Punkte
+let possibleMoves = [];
+
+// Erfolge-System
+let achievements = {
+    firstWin: { name: "Erster Sieg", icon: "🏆", earned: false },
+    pawnMaster: { name: "Bauern-Profi", icon: "👑", earned: false },
+    undoKing: { name: "Zeit-Reisender", icon: "⏳", earned: false },
+    firstBlood: { name: "Erster Schlag", icon: "⚔️", earned: false }
+};
+
+function unlockAchievement(id) {
+    if (!achievements[id].earned) {
+        achievements[id].earned = true;
+        addChat("System", `ERFOLG FREIGESCHALTET: ${achievements[id].icon} ${achievements[id].name}`, "system");
+        sounds.check.play(); 
+    }
+}
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
@@ -84,21 +100,6 @@ socket.onmessage = (e) => {
     }
 };
 
-gameModeSelect.onchange = () => {
-    if (gameModeSelect.value === "random") {
-        addChat("System", "Suche läuft... 🎲", "system");
-        socket.send(JSON.stringify({ type: 'find_random', name: getMyName() }));
-    } else {
-        boardEl.classList.remove("flipped");
-        myColor = "white";
-    }
-};
-
-document.getElementById("connectMP").onclick = () => {
-    const r = document.getElementById("roomID").value || "global";
-    socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
-};
-
 // --- 4. REGELN & SCHACH-LOGIK ---
 
 function findKing(c) {
@@ -151,7 +152,6 @@ function isSafeMove(fr, fc, tr, tc) {
     return safe;
 }
 
-// NEU: Berechnet mögliche Felder
 function getPossibleMoves(r, c) {
     let moves = [];
     for (let tr = 0; tr < 8; tr++) {
@@ -176,9 +176,10 @@ function checkGameOver() {
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
+            if(winner === "Weiß" && myColor === "white") unlockAchievement("firstWin");
             if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', playerName: getMyName() }));
         } else { 
-            statusEl.textContent = "PATT! Unentschieden."; // Pattern-Erkennung (Patt)
+            statusEl.textContent = "PATT! Unentschieden.";
         }
         return true;
     }
@@ -203,18 +204,22 @@ function doMove(fr, fc, tr, tc, emit = true) {
     history.push(JSON.stringify({ b: board.map(row => [...row]), t: turn }));
 
     const isCap = board[tr][tc] !== "";
+    if(isCap) unlockAchievement("firstBlood");
+
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
-    // Bauern-Umwandlung
+    // Umwandlung
     if (board[tr][tc] === 'P' && tr === 0) {
         const choice = prompt("Umwandlung: Q, R, B, N", "Q") || "Q";
         board[tr][tc] = choice.toUpperCase();
+        unlockAchievement("pawnMaster");
     }
     if (board[tr][tc] === 'p' && tr === 7) {
         if (gameModeSelect.value === "bot") board[tr][tc] = 'q';
         else {
             const choice = prompt("Umwandlung: q, r, b, n", "q") || "q";
             board[tr][tc] = choice.toLowerCase();
+            unlockAchievement("pawnMaster");
         }
     }
 
@@ -247,11 +252,9 @@ function draw() {
         row.forEach((p, c) => {
             const d = document.createElement("div");
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
-            
             if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
             if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
             
-            // NEU: Punkt anzeigen
             const isPossible = possibleMoves.some(m => m.tr === r && m.tc === c);
             if (isPossible) {
                 const dot = document.createElement("div");
@@ -268,35 +271,43 @@ function draw() {
             d.onclick = () => {
                 const isOnline = (gameModeSelect.value === "online" || gameModeSelect.value === "random");
                 if(isOnline && turn !== myColor) return;
-
                 if(selected) {
                     if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
                         doMove(selected.r, selected.c, r, c);
-                        selected = null;
-                        possibleMoves = [];
+                        selected = null; possibleMoves = [];
                     } else {
                         if (board[r][c] && isOwn(board[r][c])) {
-                            selected = {r, c};
-                            possibleMoves = getPossibleMoves(r, c);
+                            selected = {r, c}; possibleMoves = getPossibleMoves(r, c);
                         } else {
-                            selected = null;
-                            possibleMoves = [];
+                            selected = null; possibleMoves = [];
                         }
                     }
                 } else if(board[r][c] && isOwn(board[r][c])) {
                     if(isOnline && !isOwn(board[r][c], myColor)) return;
-                    selected = {r, c};
-                    possibleMoves = getPossibleMoves(r, c);
+                    selected = {r, c}; possibleMoves = getPossibleMoves(r, c);
                 }
                 draw();
             };
             boardEl.appendChild(d);
         });
     });
+    updateBoardColors(); 
 }
+
+// Brett-Farben System
+const cpWhite = document.getElementById("colorWhite");
+const cpBlack = document.getElementById("colorBlack");
+
+function updateBoardColors() {
+    document.querySelectorAll(".white-sq").forEach(sq => sq.style.backgroundColor = cpWhite.value);
+    document.querySelectorAll(".black-sq").forEach(sq => sq.style.backgroundColor = cpBlack.value);
+}
+cpWhite.oninput = updateBoardColors;
+cpBlack.oninput = updateBoardColors;
 
 document.getElementById("undoBtn").onclick = () => {
     if (history.length === 0) return;
+    unlockAchievement("undoKing");
     const lastState = JSON.parse(history.pop());
     board = lastState.b; turn = lastState.t;
     if (gameModeSelect.value === "bot" && history.length > 0) {
