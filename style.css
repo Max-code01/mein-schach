@@ -14,7 +14,7 @@ body {
 
 .game-container { display: flex; gap: 30px; padding: 20px; max-width: 1300px; width: 100%; }
 
-/* Schachbrett Design - DEINE ORIGINALEN FARBEN */
+/* Schachbrett Design */
 #chess-board { 
     display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); 
     border: 10px solid #222; border-radius: 8px;
@@ -25,12 +25,7 @@ body {
 .flipped { transform: rotate(180deg); }
 .flipped .square img { transform: rotate(180deg); }
 
-.square { 
-    width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; 
-    cursor: pointer; position: relative; 
-}
-
-/* Deine braunen Original-Farben */
+.square { width: 65px; height: 65px; display: flex; justify-content: center; align-items: center; cursor: pointer; position: relative; }
 .white-sq { background-color: #f0d9b5; }
 .black-sq { background-color: #b58863; }
 
@@ -69,22 +64,3 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
 .control-row { display: flex; gap: 10px; margin-top: 15px; }
 .control-row button { flex: 1; }
 #resignBtn { background: var(--danger); }
-
-/* NEU: ZUG-HINTS (Punkte auf dem Feld) */
-.possible-move-dot {
-    width: 18px;
-    height: 18px;
-    background: rgba(0, 0, 0, 0.2); /* Dezenter dunkler Punkt auf braun */
-    border-radius: 50%;
-    position: absolute;
-    z-index: 5;
-    pointer-events: none;
-}
-
-.possible-move-dot.capture-hint {
-    width: 58px;
-    height: 58px;
-    background: transparent;
-    border: 5px solid rgba(0, 0, 0, 0.15);
-    border-radius: 50%;
-}
