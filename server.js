@@ -4,32 +4,35 @@ const fs = require('fs');
 
 const server = http.createServer((req, res) => { 
     res.writeHead(200); 
-    res.end("Schach-Server mit God-Mode läuft!"); 
+    res.end("Schach-Server mit God-Mode und Nick-Schutz läuft!"); 
 });
 const wss = new WebSocket.Server({ server });
 
 // --- PERMANENTE SPEICHERUNG ---
 const LB_FILE = './leaderboard.json';
+const USER_FILE = './userDB.json'; // NEU: Passwort-Datenbank
 let leaderboard = {};
+let userDB = {}; // NEU: Speichert Name -> Passwort
 let bannedPlayers = new Set(); 
 let mutedPlayers = new Set(); 
 
 const adminPass = "geheim123"; // Dein Admin-Passwort
 
 if (fs.existsSync(LB_FILE)) {
-    try { 
-        leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); 
-    } catch (e) { 
-        leaderboard = {}; 
-    }
+    try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch (e) { leaderboard = {}; }
+}
+// NEU: Lade Benutzerdaten beim Start
+if (fs.existsSync(USER_FILE)) {
+    try { userDB = JSON.parse(fs.readFileSync(USER_FILE, 'utf8')); } catch (e) { userDB = {}; }
 }
 
 function saveLeaderboard() {
-    try {
-        fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
-    } catch (e) {
-        console.error("Speicherfehler:", e);
-    }
+    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Fehler:", e); }
+}
+
+// NEU: Speichere Benutzerdaten
+function saveUsers() {
+    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("Fehler:", e); }
 }
 
 function broadcastSystemMsg(text) {
@@ -40,7 +43,6 @@ function broadcastSystemMsg(text) {
 let waitingPlayer = null;
 
 wss.on('connection', (ws) => {
-    // Aktuelles Leaderboard beim Login senden
     const list = Object.entries(leaderboard).map(([name, wins]) => ({ name, wins })).sort((a,b)=>b.wins-a.wins).slice(0,5);
     ws.send(JSON.stringify({ type: 'leaderboard', list }));
 
@@ -48,18 +50,38 @@ wss.on('connection', (ws) => {
         try {
             const data = JSON.parse(message);
 
-            // SICHERHEITS-CHECK: Namen am Socket merken
-            if (data.playerName) ws.playerName = data.playerName;
-            if (data.name) ws.playerName = data.name;
+            // NEU: Name und Passwort extrahieren
+            const inputName = (data.playerName || data.name || "").trim();
+            const inputPass = data.password;
 
-            // BAN-CHECK: Sofort kicken, wenn Name auf Blacklist
+            // --- NICKNAME-SCHUTZ LOGIK ---
+            if (data.type === 'join') {
+                if (inputName) {
+                    if (!userDB[inputName]) {
+                        // Erster Login: Registrieren
+                        userDB[inputName] = inputPass || "";
+                        saveUsers();
+                        ws.playerName = inputName;
+                    } else {
+                        // Name existiert: Passwort prüfen
+                        if (userDB[inputName] === (inputPass || "")) {
+                            ws.playerName = inputName;
+                        } else {
+                            ws.send(JSON.stringify({ type: 'chat', text: 'FALSCHES PASSWORT für diesen Namen!', sender: 'System', system: true }));
+                            ws.terminate();
+                            return;
+                        }
+                    }
+                }
+            }
+
             if (ws.playerName && bannedPlayers.has(ws.playerName)) {
                 ws.send(JSON.stringify({ type: 'chat', text: 'DU BIST GEBANNT!', sender: 'SYSTEM' }));
                 ws.terminate();
                 return;
             }
 
-            // --- 1. ADMIN BEFEHLE ---
+            // --- ADMIN BEFEHLE ---
             if (data.type === 'chat' && data.text.startsWith('/')) {
                 const parts = data.text.split(' ');
                 const cmd = parts[0];
@@ -90,15 +112,14 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // --- 2. MUTE CHECK ---
             if (data.type === 'chat' && mutedPlayers.has(ws.playerName)) {
                 ws.send(JSON.stringify({ type: 'chat', text: 'Du bist stummgeschaltet.', sender: 'System' }));
                 return;
             }
 
-            // --- 3. DEINE ALTEN FUNKTIONEN (Sieg, Matchmaking, Move) ---
+            // --- BESTEHENDE FUNKTIONEN (Sieg, Matchmaking, Move) ---
             if (data.type === 'win') {
-                const name = data.playerName || "Anonym";
+                const name = ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
                 saveLeaderboard();
                 const updatedList = Object.entries(leaderboard).map(([n, w]) => ({ name: n, wins: w })).sort((a,b)=>b.wins-a.wins).slice(0,5);
@@ -112,14 +133,11 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden!" }));
                     waitingPlayer.room = roomID; ws.room = roomID;
                     waitingPlayer = null;
-                } else {
-                    waitingPlayer = ws;
-                }
+                } else { waitingPlayer = ws; }
             }
 
             if (data.type === 'join' && !data.type.startsWith('find_')) {
                 ws.room = data.room;
-                ws.playerName = data.name;
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
@@ -131,16 +149,13 @@ wss.on('connection', (ws) => {
                 });
             }
 
-            // User-Count
             const countMsg = JSON.stringify({ type: 'user-count', count: wss.clients.size });
             wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(countMsg); });
 
         } catch (e) { console.error("Error:", e); }
     });
 
-    ws.on('close', () => {
-        if(waitingPlayer === ws) waitingPlayer = null;
-    });
+    ws.on('close', () => { if(waitingPlayer === ws) waitingPlayer = null; });
 });
 
 const PORT = process.env.PORT || 8080;
