@@ -10,29 +10,27 @@ const wss = new WebSocket.Server({ server });
 
 // --- PERMANENTE SPEICHERUNG ---
 const LB_FILE = './leaderboard.json';
-const USER_FILE = './userDB.json'; // NEU hinzugefügt
+const USER_FILE = './userDB.json';
 let leaderboard = {};
-let userDB = {}; // NEU hinzugefügt
+let userDB = {}; 
 let bannedPlayers = new Set(); 
 let mutedPlayers = new Set(); 
 
 const adminPass = "geheim123"; // Dein Admin-Passwort
 
-// Bestehendes Leaderboard laden
 if (fs.existsSync(LB_FILE)) {
     try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch (e) { leaderboard = {}; }
 }
-// NEU: Benutzerdaten laden
 if (fs.existsSync(USER_FILE)) {
     try { userDB = JSON.parse(fs.readFileSync(USER_FILE, 'utf8')); } catch (e) { userDB = {}; }
 }
 
 function saveLeaderboard() {
-    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Fehler:", e); }
+    try { fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2)); } catch (e) { console.error("Speicherfehler:", e); }
 }
 
 function saveUsers() {
-    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("Fehler:", e); }
+    try { fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2)); } catch (e) { console.error("User-Speicherfehler:", e); }
 }
 
 function broadcastSystemMsg(text) {
@@ -43,16 +41,17 @@ function broadcastSystemMsg(text) {
 let waitingPlayer = null;
 
 wss.on('connection', (ws) => {
+    // Leaderboard beim Connect schicken
     const list = Object.entries(leaderboard).map(([name, wins]) => ({ name, wins })).sort((a,b)=>b.wins-a.wins).slice(0,5);
     ws.send(JSON.stringify({ type: 'leaderboard', list }));
 
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            const inputName = (data.playerName || data.name || "").trim();
+            const inputName = (data.playerName || data.name || data.sender || "").trim();
             const inputPass = data.password;
 
-            // --- NEU: NICKNAME-SCHUTZ LOGIK ---
+            // Nickname-Schutz Logik
             if (data.type === 'join') {
                 if (inputName) {
                     if (!userDB[inputName]) {
@@ -63,7 +62,7 @@ wss.on('connection', (ws) => {
                         if (userDB[inputName] === (inputPass || "")) {
                             ws.playerName = inputName;
                         } else {
-                            ws.send(JSON.stringify({ type: 'chat', text: 'FALSCHES PASSWORT für diesen Namen!', sender: 'System', system: true }));
+                            ws.send(JSON.stringify({ type: 'chat', text: 'NICK GESCHÜTZT! Falsches Passwort.', sender: 'System', system: true }));
                             ws.terminate();
                             return;
                         }
@@ -76,38 +75,31 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // --- NEU: ADMIN BEFEHLE ---
-            if (data.type === 'chat' && data.text.startsWith('/')) {
+            // Admin Befehle
+            if (data.type === 'chat' && data.text.startsWith('/') && data.text.includes(adminPass)) {
                 const parts = data.text.split(' ');
-                const cmd = parts[0];
+                const cmd = parts[0].toLowerCase();
                 const target = parts[1];
-                const pass = data.text.includes(adminPass);
 
-                if (pass) {
-                    if (cmd === '/kick' || cmd === '/ban') {
-                        if (cmd === '/ban') bannedPlayers.add(target);
-                        wss.clients.forEach(client => {
-                            if (client.playerName === target) {
-                                client.send(JSON.stringify({ type: 'chat', text: 'Admin hat dich entfernt!', sender: 'SYSTEM' }));
-                                client.terminate();
-                            }
-                        });
-                        broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
-                        return;
-                    }
-                    if (cmd === '/mute') {
-                        mutedPlayers.add(target);
-                        broadcastSystemMsg(`${target} wurde stummgeschaltet.`);
-                        return;
-                    }
-                    if (cmd === '/wipe') {
-                        wss.clients.forEach(c => c.terminate());
-                        return;
-                    }
+                if (cmd === '/kick' || cmd === '/ban') {
+                    if (cmd === '/ban') bannedPlayers.add(target);
+                    wss.clients.forEach(client => {
+                        if (client.playerName === target) {
+                            client.send(JSON.stringify({ type: 'chat', text: 'KICK DURCH ADMIN!', sender: 'SYSTEM' }));
+                            client.terminate();
+                        }
+                    });
+                    broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
+                    return;
+                }
+                if (cmd === '/mute') {
+                    mutedPlayers.add(target);
+                    broadcastSystemMsg(`${target} wurde stummgeschaltet.`);
+                    return;
                 }
             }
 
-            // --- DEINE BESTEHENDE LOGIK (UNVERÄNDERT) ---
+            // Deine bestehende Logik
             if (data.type === 'win') {
                 const name = ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
@@ -128,11 +120,12 @@ wss.on('connection', (ws) => {
 
             if (data.type === 'join' && !data.type.startsWith('find_')) {
                 ws.room = data.room;
+                ws.playerName = inputName;
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
             if (data.type === 'chat' || data.type === 'move') {
-                if (mutedPlayers.has(ws.playerName) && data.type === 'chat') return;
+                if (data.type === 'chat' && mutedPlayers.has(ws.playerName)) return;
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
                         client.send(JSON.stringify(data));
@@ -149,4 +142,4 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server läuft auf ${PORT}`));
+server.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
