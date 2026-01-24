@@ -2,25 +2,18 @@ const WebSocket = require('ws');
 const http = require('http');
 const fs = require('fs');
 
-const server = http.createServer((req, res) => { res.writeHead(200); res.end("Schach-Server läuft!"); });
+const server = http.createServer((req, res) => { res.writeHead(200); res.end("Admin-Server aktiv."); });
 const wss = new WebSocket.Server({ server });
 
 const LB_FILE = './leaderboard.json';
 let leaderboard = {};
-let bannedPlayers = new Set(); // Hier speichern wir die Gebannten (bis zum Neustart)
+let bannedPlayers = new Set(); 
+let mutedPlayers = new Set(); // NEU: Mute-Liste
 
-// Admin Passwort
 const adminPass = "geheim123";
 
-// Laden beim Start
 if (fs.existsSync(LB_FILE)) {
-    try {
-        leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8'));
-    } catch (e) { leaderboard = {}; }
-}
-
-function saveLeaderboard() {
-    fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
+    try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch (e) { leaderboard = {}; }
 }
 
 function broadcastSystemMsg(text) {
@@ -29,84 +22,91 @@ function broadcastSystemMsg(text) {
 }
 
 wss.on('connection', (ws) => {
-    // Leaderboard senden
-    const list = Object.entries(leaderboard).map(([name, wins]) => ({ name, wins })).sort((a,b)=>b.wins-a.wins).slice(0,5);
-    ws.send(JSON.stringify({ type: 'leaderboard', list }));
-
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
-            // BAN-CHECK: Wenn der Name auf der Blacklist steht, sofort kicken
-            if (data.type === 'join' && bannedPlayers.has(data.name)) {
-                ws.send(JSON.stringify({ type: 'chat', text: 'DU BIST GEBANNT!', sender: 'SYSTEM' }));
-                ws.terminate();
-                return;
-            }
-
-            // JOIN LOGIK
-            if (data.type === 'join' && !data.type.startsWith('find_')) {
+            // 1. BEITRETEN (Namen am Socket registrieren)
+            if (data.type === 'join') {
+                if (bannedPlayers.has(data.name)) {
+                    ws.send(JSON.stringify({ type: 'chat', text: 'DU BIST GEBANNT!', sender: 'SYSTEM' }));
+                    ws.terminate();
+                    return;
+                }
                 ws.room = data.room;
-                ws.playerName = data.name; // SEHR WICHTIG FÜR KICK
+                ws.playerName = data.name; // DAS MUSS HIER STEHEN
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
-            // ADMIN BEFEHLE
+            // 2. ADMIN-ZENTRALE
             if (data.type === 'chat') {
-                // 1. KICK (Wirft raus)
-                if (data.text.startsWith('/kick ')) {
-                    const target = data.text.split(' ')[1];
-                    const pass = data.text.split(' ')[2];
+                const text = data.text;
+
+                // KICK: Wirft raus
+                if (text.startsWith('/kick ')) {
+                    const [_, target, pass] = text.split(' ');
                     if (pass === adminPass) {
-                        wss.clients.forEach(client => {
-                            if (client.playerName === target) client.terminate();
-                        });
-                        broadcastSystemMsg(`Spieler ${target} wurde entfernt.`);
+                        wss.clients.forEach(c => { if(c.playerName === target) c.terminate(); });
+                        broadcastSystemMsg(`Spieler ${target} wurde gekickt.`);
                         return;
                     }
                 }
 
-                // 2. BAN (Wirft raus und blockiert den Namen)
-                if (data.text.startsWith('/ban ')) {
-                    const target = data.text.split(' ')[1];
-                    const pass = data.text.split(' ')[2];
+                // BAN: Blockiert Name dauerhaft (bis Neustart)
+                if (text.startsWith('/ban ')) {
+                    const [_, target, pass] = text.split(' ');
                     if (pass === adminPass) {
                         bannedPlayers.add(target);
-                        wss.clients.forEach(client => {
-                            if (client.playerName === target) client.terminate();
-                        });
-                        broadcastSystemMsg(`Spieler ${target} wurde PERMANENT GEBANNT.`);
+                        wss.clients.forEach(c => { if(c.playerName === target) c.terminate(); });
+                        broadcastSystemMsg(`Spieler ${target} wurde GEBANNT.`);
                         return;
                     }
                 }
 
-                // 3. RESET LEADERBOARD (Löscht alle Siege)
-                if (data.text === `/resetall ${adminPass}`) {
-                    leaderboard = {};
-                    saveLeaderboard();
-                    const msg = JSON.stringify({ type: 'leaderboard', list: [] });
-                    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
-                    broadcastSystemMsg(`Das Leaderboard wurde vom Admin gelöscht!`);
+                // MUTE: Spieler darf nicht mehr schreiben
+                if (text.startsWith('/mute ')) {
+                    const [_, target, pass] = text.split(' ');
+                    if (pass === adminPass) {
+                        mutedPlayers.add(target);
+                        broadcastSystemMsg(`Spieler ${target} wurde stummgeschaltet.`);
+                        return;
+                    }
+                }
+
+                // UNMUTE: Spieler darf wieder schreiben
+                if (text.startsWith('/unmute ')) {
+                    const [_, target, pass] = text.split(' ');
+                    if (pass === adminPass) {
+                        mutedPlayers.delete(target);
+                        broadcastSystemMsg(`Spieler ${target} darf wieder sprechen.`);
+                        return;
+                    }
+                }
+
+                // WIPE: Alle Spieler gleichzeitig rauswerfen
+                if (text === `/wipe ${adminPass}`) {
+                    broadcastSystemMsg("SERVER-WIPE: Alle werden getrennt!");
+                    wss.clients.forEach(c => c.terminate());
                     return;
                 }
-                
-                // 4. CLEAR CHAT
-                if (data.text === `/clear ${adminPass}`) {
-                    const msg = JSON.stringify({ type: 'chat', text: '<br>'.repeat(60) + '--- Chat geleert ---', sender: 'SYSTEM' });
-                    wss.clients.forEach(c => c.send(msg));
+
+                // BROADCAST: Goldene Nachricht für alle
+                if (text.startsWith('/alert ')) {
+                    const msgContent = text.replace('/alert ', '').replace(adminPass, '');
+                    if (text.includes(adminPass)) {
+                        broadcastSystemMsg(`📢 ADMIN-DURCHSAGE: ${msgContent}`);
+                        return;
+                    }
+                }
+
+                // Chat-Sperre für Gemutete
+                if (mutedPlayers.has(ws.playerName)) {
+                    ws.send(JSON.stringify({ type: 'chat', text: 'Du bist stummgeschaltet!', sender: 'System' }));
                     return;
                 }
             }
 
-            // NORMALER WEITERLEITUNGS-CODE (Move, Win, Chat)
-            if (data.type === 'win') {
-                const name = data.playerName || "Anonym";
-                leaderboard[name] = (leaderboard[name] || 0) + 1;
-                saveLeaderboard();
-                const list = Object.entries(leaderboard).map(([n, w]) => ({ name: n, wins: w })).sort((a,b)=>b.wins-a.wins).slice(0,5);
-                wss.clients.forEach(c => c.send(JSON.stringify({ type: 'leaderboard', list })));
-            }
-
+            // Normaler Chat & Move
             if (data.type === 'chat' || data.type === 'move') {
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === (data.room || ws.room)) {
@@ -120,4 +120,4 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server läuft!`));
+server.listen(PORT, () => console.log(`God-Mode Server online!`));
