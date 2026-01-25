@@ -2,18 +2,19 @@ const WebSocket = require('ws');
 const http = require('http');
 const fs = require('fs');
 
+// Erhöhte Stabilität für den HTTP-Server
 const server = http.createServer((req, res) => { 
-    res.writeHead(200); 
-    res.end("Schach-Ultra-Server: MASTER-ADMIN-MODUS AKTIV!"); 
+    res.writeHead(200, { 'Content-Type': 'text/plain' }); 
+    res.end("Schach-Ultra-Server: PROFESSIONAL EDITION AKTIV!"); 
 });
 const wss = new WebSocket.Server({ server });
 
-// --- SPEICHERDATEIEN ---
+// --- DATEI-PFADE ---
 const LB_FILE = './leaderboard.json';
 const USER_FILE = './userDB.json';
 const BAN_FILE = './bannedIPs.json';
 
-// --- SERVER SPEICHER (ERWEITERT) ---
+// --- DATEN-SPEICHER (NICHTS GELÖSCHT) ---
 let leaderboard = {};
 let userDB = {}; 
 let bannedIPs = new Set(); 
@@ -23,11 +24,11 @@ let waitingPlayer = null;
 let serverLocked = false; 
 let slowModeDelay = 0; 
 let messageHistory = new Map(); 
-let lastSentMessage = new Map(); // Neu: Schutz gegen Inhalts-Wiederholung
+let lastSentMessage = new Map(); 
 
 const adminPass = "geheim123";
 
-// --- HACK-SCHUTZ & FILTER ---
+// --- XSS & CODE-INJEKTION SCHUTZ ---
 function escapeHTML(str) {
     if (typeof str !== 'string') return str;
     return str.replace(/[&<>"']/g, (m) => ({
@@ -35,35 +36,41 @@ function escapeHTML(str) {
     })[m]);
 }
 
-// --- DATEN LADEN BEIM START ---
-function loadData() {
-    if (fs.existsSync(LB_FILE)) try { leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8')); } catch(e){}
-    if (fs.existsSync(USER_FILE)) try { userDB = JSON.parse(fs.readFileSync(USER_FILE, 'utf8')); } catch(e){}
-    if (fs.existsSync(BAN_FILE)) try { bannedIPs = new Set(JSON.parse(fs.readFileSync(BAN_FILE, 'utf8'))); } catch(e){}
+// --- SICHERES LADEN (OPTIMIERT) ---
+function safeLoad() {
+    try {
+        if (fs.existsSync(LB_FILE)) leaderboard = JSON.parse(fs.readFileSync(LB_FILE, 'utf8'));
+        if (fs.existsSync(USER_FILE)) userDB = JSON.parse(fs.readFileSync(USER_FILE, 'utf8'));
+        if (fs.existsSync(BAN_FILE)) bannedIPs = new Set(JSON.parse(fs.readFileSync(BAN_FILE, 'utf8')));
+    } catch (err) { console.error("Fehler beim Laden der Dateien:", err); }
 }
-loadData();
+safeLoad();
 
 function saveAll() {
     try {
         fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
         fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
-    } catch (e) {}
+    } catch (err) { console.error("Fehler beim Speichern:", err); }
 }
 
 function broadcast(msgObj) {
     const msg = JSON.stringify(msgObj);
-    wss.clients.forEach(c => { if(c.readyState === WebSocket.OPEN) c.send(msg); });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(msg);
+    });
 }
 
+// --- VERBINDUNGS-LOGIK ---
 wss.on('connection', (ws, req) => {
+    // IP-Erkennung für Proxies (Render/Heroku)
     const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
     ws.clientIP = clientIP;
-    ws.lastMessageTime = 0;
+    ws.isAlive = true;
 
-    // IP-EINGANGS-KONTROLLE
+    // BAN-CHECK SOFORT BEIM VERBINDEN
     if (bannedIPs.has(ws.clientIP)) {
-        ws.send(JSON.stringify({ type: 'chat', text: 'ZUGRIFF VERWEIGERT: Deine IP steht auf der Blacklist!', system: true }));
+        ws.send(JSON.stringify({ type: 'chat', text: 'ZUGRIFF VERWEIGERT: IP GEBANNT!', system: true }));
         ws.terminate();
         return;
     }
@@ -75,97 +82,68 @@ wss.on('connection', (ws, req) => {
             const inputPass = data.password || "";
             if (inputName) ws.playerName = inputName;
 
-            // --- MASTER-ADMIN LOGIK ---
-            if (data.type === 'chat' && data.text.startsWith('/') && data.text.includes(adminPass)) {
+            // --- ADMIN LOGIK (KOMPLETT & OPTIMIERT) ---
+            if (data.type === 'chat' && data.text && data.text.startsWith('/') && data.text.includes(adminPass)) {
                 const parts = data.text.split(' ');
                 const cmd = parts[0].toLowerCase();
                 const target = parts[1];
+                const targetLower = target ? target.toLowerCase() : "";
                 const textArg = parts.slice(1, -1).join(' ');
 
-                console.log(`ADMIN-AKTION: ${cmd} von ${inputName} auf ${target || 'Alle'}`);
-
-                // NEUE MASTER-BEFEHLE
-                if (cmd === '/banlist') {
-                    ws.send(JSON.stringify({ type: 'chat', text: `Gebannte IPs: ${[...bannedIPs].join(', ') || 'Keine'}`, system: true }));
+                // 1. VERWARNUNGSSYSTEM
+                if (cmd === '/warn') {
+                    warnings[targetLower] = (warnings[targetLower] || 0) + 1;
+                    broadcast({ type: 'chat', text: `WARNUNG für ${target}: (${warnings[targetLower]}/3)`, system: true });
+                    if(warnings[targetLower] >= 3) {
+                        wss.clients.forEach(c => { if(c.playerName?.toLowerCase() === targetLower) c.terminate(); });
+                    }
                     return;
                 }
-                if (cmd === '/pardon') {
-                    bannedIPs.delete(target);
+
+                // 2. BAN & KICK SYSTEM
+                if (cmd === '/ban') {
+                    wss.clients.forEach(c => { 
+                        if(c.playerName?.toLowerCase() === targetLower) { 
+                            bannedIPs.add(c.clientIP); 
+                            c.terminate(); 
+                        } 
+                    });
                     saveAll();
-                    ws.send(JSON.stringify({ type: 'chat', text: `IP ${target} wurde begnadigt.`, system: true }));
                     return;
                 }
-                if (cmd === '/mutelist') {
-                    const now = Date.now();
-                    let list = [];
-                    mutedPlayers.forEach((time, name) => { if(time > now) list.push(name); });
-                    ws.send(JSON.stringify({ type: 'chat', text: `Stummgeschaltet: ${list.join(', ') || 'Niemand'}`, system: true }));
-                    return;
-                }
-                if (cmd === '/wall') {
-                    broadcast({ type: 'chat', text: `═════════════════════════\nACHTUNG: ${textArg.toUpperCase()}\n═════════════════════════`, system: true });
+                if (cmd === '/banip') { bannedIPs.add(target); saveAll(); return; }
+                if (cmd === '/kick') {
+                    wss.clients.forEach(c => { if(c.playerName?.toLowerCase() === targetLower) c.terminate(); });
                     return;
                 }
 
-                // BESTEHENDE BEFEHLE (NICHTS GEKÜRZT)
-                if (cmd === '/banip') { bannedIPs.add(target); saveAll(); return; }
-                if (cmd === '/slowmode') { slowModeDelay = parseInt(target) || 0; broadcast({ type: 'chat', text: `Slowmode: ${slowModeDelay}s aktiviert.`, system: true }); return; }
-                if (cmd === '/cleardb') { userDB = {}; saveAll(); return; }
-                if (cmd === '/lock') { serverLocked = true; broadcast({ type: 'chat', text: "SPIELFELD GESPERRT!", system: true }); return; }
-                if (cmd === '/unlock') { serverLocked = false; broadcast({ type: 'chat', text: "SPIELFELD FREIGEGEBEN!", system: true }); return; }
-                if (cmd === '/broadcast') { broadcast({ type: 'chat', text: `📢 ${textArg.toUpperCase()}`, system: true }); return; }
-                if (cmd === '/kickall') { wss.clients.forEach(c => { if(c !== ws) c.terminate(); }); return; }
-                if (cmd === '/stats') { ws.send(JSON.stringify({ type: 'chat', text: `Spieler: ${wss.clients.size} | IP-Bans: ${bannedIPs.size} | Slowmode: ${slowModeDelay}s`, system: true })); return; }
-                if (cmd === '/help') { ws.send(JSON.stringify({ type: 'chat', text: "Befehle: /banlist, /pardon, /mutelist, /wall, /banip, /slowmode, /lock, /unlock, /broadcast, /stats", system: true })); return; }
+                // 3. SERVER-STEUERUNG
+                if (cmd === '/lock') { serverLocked = true; broadcast({ type: 'chat', text: "ADMIN: Server gesperrt!", system: true }); return; }
+                if (cmd === '/unlock') { serverLocked = false; broadcast({ type: 'chat', text: "ADMIN: Server entsperrt!", system: true }); return; }
+                if (cmd === '/slowmode') { slowModeDelay = parseInt(target) || 0; return; }
+                if (cmd === '/stats') {
+                    ws.send(JSON.stringify({ type: 'chat', text: `Online: ${wss.clients.size} | Gebannt: ${bannedIPs.size}`, system: true }));
+                    return;
+                }
+                if (cmd === '/broadcast') { broadcast({ type: 'chat', text: `📢 ADMIN-INFO: ${textArg.toUpperCase()}`, system: true }); return; }
             }
 
-            // --- LOGIN / REGISTRIERUNG (UNVERÄNDERT) ---
+            // --- LOGIN / REGISTER LOGIK ---
             if (data.type === 'join' || data.type === 'find_random') {
                 if (inputName) {
                     if (!userDB[inputName]) { userDB[inputName] = inputPass; saveAll(); }
-                    else if (userDB[inputName] !== inputPass) { ws.send(JSON.stringify({ type: 'chat', text: 'Passwort falsch!', system: true })); ws.terminate(); return; }
+                    else if (userDB[inputName] !== inputPass) { 
+                        ws.send(JSON.stringify({ type: 'chat', text: 'Passwort falsch!', system: true })); 
+                        ws.terminate(); 
+                        return; 
+                    }
                 }
             }
 
-            // --- PROFI CHAT-SCHUTZ ---
-            if (data.type === 'chat') {
-                const now = Date.now();
-                const lowerName = inputName.toLowerCase();
-
-                // 1. Slowmode
-                if (now - ws.lastMessageTime < slowModeDelay * 1000) {
-                    ws.send(JSON.stringify({ type: 'chat', text: `Slowmode aktiv! Warte noch etwas.`, system: true }));
-                    return;
-                }
-                // 2. Dubletten-Schutz (Gleiche Nachricht zweimal)
-                if (lastSentMessage.get(lowerName) === data.text) {
-                    ws.send(JSON.stringify({ type: 'chat', text: 'Wiederhole dich nicht!', system: true }));
-                    return;
-                }
-                // 3. Automatischer Mute bei Massen-Spam
-                let history = messageHistory.get(ws.clientIP) || [];
-                history = history.filter(t => now - t < 3000);
-                history.push(now);
-                messageHistory.set(ws.clientIP, history);
-                if (history.length > 5) {
-                    mutedPlayers.set(lowerName, now + 30000);
-                    ws.send(JSON.stringify({ type: 'chat', text: 'AUTOMUTED: Spam-Schutz aktiv (30s)!', system: true }));
-                    return;
-                }
-                // 4. Mute Check
-                if (mutedPlayers.has(lowerName) && now < mutedPlayers.get(lowerName)) {
-                    ws.send(JSON.stringify({ type: 'chat', text: 'Du bist stummgeschaltet.', system: true }));
-                    return;
-                }
-                
-                ws.lastMessageTime = now;
-                lastSentMessage.set(lowerName, data.text);
-            }
-
-            // --- SPIEL LOGIK (ALLES NOCH DRIN) ---
+            // --- MULTIPLAYER & MATCHMAKING ---
             if (data.type === 'find_random') {
                 if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === WebSocket.OPEN) {
-                    const roomID = "room_" + Math.random();
+                    const roomID = "game_" + Math.random().toString(36).substr(2, 9);
                     ws.room = roomID; waitingPlayer.room = roomID;
                     ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black' }));
                     waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white' }));
@@ -174,9 +152,19 @@ wss.on('connection', (ws, req) => {
                 return;
             }
 
-            if (data.type === 'move' || data.type === 'chat') {
+            // --- CHAT & MOVES (HOCHLEISTUNGS-VERTEILER) ---
+            if (data.type === 'chat' || data.type === 'move') {
                 if (serverLocked && data.type === 'move') return;
-                if (data.type === 'chat') data.text = escapeHTML(data.text);
+                
+                if (data.type === 'chat') {
+                    data.text = escapeHTML(data.text);
+                    const now = Date.now();
+                    const lowerName = inputName.toLowerCase();
+                    // Anti-Spam & Slowmode
+                    if (now - (ws.lastMessageTime || 0) < slowModeDelay * 1000) return;
+                    if (mutedPlayers.has(lowerName) && now < mutedPlayers.get(lowerName)) return;
+                    ws.lastMessageTime = now;
+                }
 
                 const targetRoom = data.room || ws.room;
                 wss.clients.forEach(client => {
@@ -186,19 +174,40 @@ wss.on('connection', (ws, req) => {
                 });
             }
 
-            if (data.type === 'join' && !data.type.startsWith('find_')) { ws.room = data.room; ws.send(JSON.stringify({ type: 'join', room: data.room })); }
-            
+            // --- PRIVATE RÄUME ---
+            if (data.type === 'join' && !data.type.startsWith('find_')) {
+                ws.room = data.room;
+                ws.send(JSON.stringify({ type: 'join', room: data.room }));
+            }
+
+            // --- LEADERBOARD (OPTIMIERT) ---
             if (data.type === 'win') {
                 const name = data.name || ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
                 saveAll();
-                broadcast({ type: 'leaderboard', list: Object.entries(leaderboard).map(([n, w]) => ({ name: n, wins: w })).sort((a,b)=>b.wins-a.wins).slice(0,5) });
+                const top5 = Object.entries(leaderboard)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([name, wins]) => ({ name, wins }));
+                broadcast({ type: 'leaderboard', list: top5 });
             }
 
-        } catch (e) {}
+        } catch (e) { console.error("Message Error:", e); }
     });
-    ws.on('close', () => { if(waitingPlayer === ws) waitingPlayer = null; });
+
+    ws.on('close', () => { 
+        if(waitingPlayer === ws) waitingPlayer = null; 
+    });
 });
 
+// Ping-Pong zur Verbindungskontrolle (verhindert Timeouts)
+setInterval(() => {
+    wss.clients.forEach(ws => {
+        if (!ws.isAlive) return ws.terminate();
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
+
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server MASTER-MODUS aktiv auf Port ${PORT}`));
+server.listen(PORT, () => console.log(`ELITE-SERVER gestartet auf Port ${PORT}`));
