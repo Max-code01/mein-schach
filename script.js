@@ -81,6 +81,12 @@ chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
+        // --- NEU: SYSTEM-ALERT (FÜR BANS/MUTES/KICKS) ---
+        case 'system_alert':
+            alert("🚨 ADMIN-MELDUNG: " + d.message);
+            addChat("SYSTEM", d.message, "system");
+            break;
+
         case 'join':
             onlineRoom = d.room;
             document.getElementById("roomID").value = d.room;
