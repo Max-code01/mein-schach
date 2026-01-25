@@ -23,7 +23,7 @@ let waitingPlayer = null;
 
 const adminPass = "geheim123";
 
-// --- NEU: SICHERHEITS-FILTER (HINZUGEFÜGT) ---
+// --- SICHERHEITS-FILTER (GEGEN HACKS) ---
 function escapeHTML(str) {
     if (typeof str !== 'string') return str;
     return str.replace(/[&<>"']/g, (m) => ({
@@ -59,6 +59,7 @@ function broadcast(msgObj) {
 }
 
 wss.on('connection', (ws, req) => {
+    // IP-Erkennung verbessert
     const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
     ws.clientIP = clientIP;
 
@@ -79,13 +80,17 @@ wss.on('connection', (ws, req) => {
 
             if (inputName) ws.playerName = inputName;
 
+            // --- VERBESSERTE ADMIN-LOGIK ---
             if (data.type === 'chat' && data.text.startsWith('/') && data.text.includes(adminPass)) {
                 const parts = data.text.split(' ');
                 const cmd = parts[0].toLowerCase();
                 const target = parts[1];
                 const targetLower = target ? target.toLowerCase() : "";
+                
+                // Extrahiert den Text für /say oder /announce (alles zwischen Befehl und Passwort)
                 const textArg = parts.slice(1, -1).join(' ');
 
+                // 1. KICK
                 if (cmd === '/kick') {
                     wss.clients.forEach(c => { 
                         if (c.playerName && c.playerName.toLowerCase() === targetLower) c.terminate(); 
@@ -94,6 +99,7 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
+                // 2. BAN (Name + IP)
                 if (cmd === '/ban') {
                     bannedPlayers.add(targetLower);
                     wss.clients.forEach(c => { 
@@ -107,43 +113,79 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
+                // 3. UNBAN
                 if (cmd === '/unban') {
                     bannedPlayers.delete(targetLower);
-                    bannedIPs.delete(target);
+                    bannedIPs.delete(target); // target kann hier auch eine IP sein
                     saveAll();
                     ws.send(JSON.stringify({ type: 'chat', text: `${target} wurde entbannt.`, sender: 'SYSTEM', system: true }));
                     return;
                 }
 
+                // 4. MUTE
                 if (cmd === '/mute') {
                     mutedPlayers.add(targetLower);
                     broadcast({ type: 'chat', text: `${target} wurde stummgeschaltet.`, sender: 'SYSTEM', system: true });
                     return;
                 }
 
+                // 5. UNMUTE
                 if (cmd === '/unmute') {
                     mutedPlayers.delete(targetLower);
                     broadcast({ type: 'chat', text: `${target} darf wieder chatten.`, sender: 'SYSTEM', system: true });
                     return;
                 }
 
+                // 6. SAY (Als Admin sprechen)
                 if (cmd === '/say') {
                     broadcast({ type: 'chat', text: `📢 ADMIN: ${textArg}`, sender: 'ADMIN', system: true });
                     return;
                 }
 
-                if (cmd === '/listbans') {
-                    ws.send(JSON.stringify({ type: 'chat', text: `Bans: ${[...bannedPlayers].join(', ')} | IPs: ${[...bannedIPs].join(', ')}`, sender: 'SYSTEM', system: true }));
+                // --- NEUE EXKLUSIVE BEFEHLE ---
+
+                // 7. CHECKIP (Wer ist das?)
+                if (cmd === '/checkip') {
+                    let found = false;
+                    wss.clients.forEach(c => { 
+                        if (c.playerName && c.playerName.toLowerCase() === targetLower) { 
+                            ws.send(JSON.stringify({ type: 'chat', text: `INFO: ${target} nutzt IP: ${c.clientIP}`, sender: 'SYSTEM', system: true }));
+                            found = true;
+                        } 
+                    });
+                    if(!found) ws.send(JSON.stringify({ type: 'chat', text: `Spieler ${target} nicht gefunden.`, sender: 'SYSTEM', system: true }));
                     return;
                 }
 
+                // 8. ANNOUNCE (Fett für alle)
+                if (cmd === '/announce') {
+                    broadcast({ type: 'chat', text: `🛑 WICHTIG: ${textArg.toUpperCase()} 🛑`, sender: 'SYSTEM', system: true });
+                    return;
+                }
+
+                // 9. KICKALL (Server leerfegen)
+                if (cmd === '/kickall') {
+                    wss.clients.forEach(c => { if (c !== ws) c.terminate(); });
+                    broadcast({ type: 'chat', text: `Alle Spieler wurden vom Admin entfernt!`, sender: 'SYSTEM', system: true });
+                    return;
+                }
+
+                // 10. LISTBANS
+                if (cmd === '/listbans') {
+                    ws.send(JSON.stringify({ type: 'chat', text: `Bans: ${[...bannedPlayers].join(', ') || 'Keine'} | IPs: ${[...bannedIPs].join(', ') || 'Keine'}`, sender: 'SYSTEM', system: true }));
+                    return;
+                }
+
+                // 11. CLEARLEADERBOARD
                 if (cmd === '/clearleaderboard') {
                     leaderboard = {}; saveAll();
                     broadcast({ type: 'leaderboard', list: [] });
+                    ws.send(JSON.stringify({ type: 'chat', text: `Leaderboard wurde gelöscht.`, sender: 'SYSTEM', system: true }));
                     return;
                 }
             }
 
+            // --- NORMALES GAME-HANDLING (NICHTS GELÖSCHT) ---
             if (data.type === 'join' || data.type === 'find_random') {
                 if (inputName) {
                     if (!userDB[inputName]) {
@@ -162,7 +204,6 @@ wss.on('connection', (ws, req) => {
                     const roomID = "random_" + Math.random();
                     ws.room = roomID;
                     waitingPlayer.room = roomID;
-                    
                     ws.send(JSON.stringify({ type: 'join', room: roomID, color: 'black', systemMsg: "Gegner gefunden! Du bist Schwarz." }));
                     waitingPlayer.send(JSON.stringify({ type: 'join', room: roomID, color: 'white', systemMsg: "Gegner gefunden! Du bist Weiß." }));
                     waitingPlayer = null;
@@ -173,7 +214,7 @@ wss.on('connection', (ws, req) => {
             }
 
             if (data.type === 'chat' || data.type === 'move') {
-                // NEU: SICHERHEIT (HINZUGEFÜGT)
+                // SICHERHEIT: HTML-Säuberung
                 if (data.type === 'chat' && data.text) {
                     data.text = escapeHTML(data.text);
                 }
@@ -215,4 +256,4 @@ wss.on('connection', (ws, req) => {
 });
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`Server läuft stabil auf Port ${PORT}`));
+server.listen(PORT, () => console.log(`Server läuft mit 11 Admin-Befehlen auf Port ${PORT}`));
