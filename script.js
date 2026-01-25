@@ -41,11 +41,24 @@ if (cpWhite && cpBlack) {
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
 
-// --- 2. CHAT & SYSTEM ---
+// --- 2. CHAT & SYSTEM (AKTUALISIERT FÜR SICHERHEIT) ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
-    m.innerHTML = type === "system" ? `⚙️ ${text}` : `<strong>${sender}:</strong> ${text}`;
+    
+    // Wir nutzen hier textContent, um HTML-Ausführung zu verhindern
+    if (type === "system") {
+        m.textContent = "⚙️ " + text;
+    } else {
+        const strong = document.createElement("strong");
+        strong.textContent = sender + ": ";
+        m.appendChild(strong);
+        
+        const span = document.createElement("span");
+        span.textContent = text;
+        m.appendChild(span);
+    }
+    
     chatMessages.appendChild(m);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -57,8 +70,6 @@ document.querySelectorAll('.emoji-btn').forEach(b => {
 function sendMsg() {
     const t = chatInput.value.trim();
     if (t && socket.readyState === 1) {
-        // KORREKTUR: Hier wird der Name und Text gesendet. 
-        // Der Server erkennt Admin-Befehle, weil das Passwort im Text "t" enthalten ist.
         socket.send(JSON.stringify({ type: 'chat', text: t, sender: getMyName(), room: onlineRoom }));
         addChat("Ich", t, "me"); chatInput.value = "";
     }
@@ -176,7 +187,6 @@ function checkGameOver() {
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
-            // KORREKTUR: Sende 'name' statt 'playerName', damit der Server den Namen im Leaderboard einträgt
             if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', name: getMyName() }));
         } else { statusEl.textContent = "PATT! Unentschieden."; }
         return true;
