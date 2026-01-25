@@ -29,6 +29,16 @@ let lastSentMessage = new Map();
 
 const adminPass = "geheim123";
 
+// --- NEU: HILFSFUNKTION FÜR POPUP-NACHRICHTEN ---
+const sendSystemAlert = (targetWs, message) => {
+    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+        targetWs.send(JSON.stringify({ 
+            type: 'system_alert', 
+            message: message 
+        }));
+    }
+};
+
 // --- SICHERHEITS-LOGIK (XSS FILTER) ---
 function escapeHTML(str) {
     if (typeof str !== 'string') return str;
@@ -101,10 +111,10 @@ wss.on('connection', function(ws, req) {
     ws.clientIP = clientIP;
     ws.lastMessageTime = 0;
 
-    // IP-BAN CHECK (SOFORT-BLOCK)
+    // IP-BAN CHECK (SOFORT-BLOCK MIT POPUP)
     if (bannedIPs.has(ws.clientIP)) {
-        ws.send(JSON.stringify({ type: 'chat', text: 'ZUGRIFF VERWEIGERT: Deine IP ist gebannt!', system: true }));
-        ws.terminate();
+        sendSystemAlert(ws, '❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!');
+        setTimeout(() => ws.terminate(), 1000);
         return;
     }
 
@@ -127,19 +137,18 @@ wss.on('connection', function(ws, req) {
                     let attempts = (loginAttempts.get(ws.clientIP) || 0) + 1;
                     loginAttempts.set(ws.clientIP, attempts);
                     
-                    // Logging für Hacker-Versuche
                     console.warn("⚠️ HACK-VERDACHT: " + inputName + " (" + ws.clientIP + ") nutzte falschen Admin-Befehl! Versuch: " + attempts + "/5");
 
                     if (attempts >= 5) {
                         console.error("🚨 AUTO-BAN: IP " + ws.clientIP + " wurde nach 5 Fehlversuchen gesperrt!");
                         bannedIPs.add(ws.clientIP);
                         saveAll();
-                        ws.terminate();
+                        sendSystemAlert(ws, '❌ ZU VIELE FEHLVERSUCHE: Du wurdest automatisch gebannt!');
+                        setTimeout(() => ws.terminate(), 1000);
                     }
                     return; 
                 }
 
-                // Passwort korrekt -> Versuche zurücksetzen & Loggen
                 loginAttempts.set(ws.clientIP, 0);
                 console.log("✅ ADMIN-AKTION: " + inputName + " nutzt Befehl: " + cmd);
 
@@ -151,19 +160,26 @@ wss.on('connection', function(ws, req) {
                 if (cmd === '/warn') {
                     warnings[targetLower] = (warnings[targetLower] || 0) + 1;
                     broadcast({ type: 'chat', text: "WARNUNG für " + target + ": (" + warnings[targetLower] + "/3)", system: true });
-                    if (warnings[targetLower] >= 3) {
-                        wss.clients.forEach(function(c) {
-                            if (c.playerName && c.playerName.toLowerCase() === targetLower) {
-                                c.terminate();
+                    
+                    wss.clients.forEach(function(c) {
+                        if (c.playerName && c.playerName.toLowerCase() === targetLower) {
+                            sendSystemAlert(c, "⚠️ WARNUNG: Du hast eine Verwarnung erhalten! (" + warnings[targetLower] + "/3)");
+                            if (warnings[targetLower] >= 3) {
+                                setTimeout(() => c.terminate(), 1000);
                             }
-                        });
-                    }
+                        }
+                    });
                     return;
                 }
 
                 // 2. /mute
                 if (cmd === '/mute') {
                     mutedPlayers.set(targetLower, Date.now() + 3600000); 
+                    wss.clients.forEach(c => {
+                        if(c.playerName && c.playerName.toLowerCase() === targetLower) {
+                            sendSystemAlert(c, '🔇 Du wurdest stummgeschaltet.');
+                        }
+                    });
                     ws.send(JSON.stringify({ type: 'chat', text: target + " stummgeschaltet.", system: true }));
                     return;
                 }
@@ -171,6 +187,11 @@ wss.on('connection', function(ws, req) {
                 // 3. /unmute
                 if (cmd === '/unmute') {
                     mutedPlayers.delete(targetLower);
+                    wss.clients.forEach(c => {
+                        if(c.playerName && c.playerName.toLowerCase() === targetLower) {
+                            sendSystemAlert(c, '🔊 Dein Mute wurde aufgehoben!');
+                        }
+                    });
                     ws.send(JSON.stringify({ type: 'chat', text: target + " entstummt.", system: true }));
                     return;
                 }
@@ -179,7 +200,8 @@ wss.on('connection', function(ws, req) {
                 if (cmd === '/kick') {
                     wss.clients.forEach(function(c) {
                         if (c.playerName && c.playerName.toLowerCase() === targetLower) {
-                            c.terminate();
+                            sendSystemAlert(c, 'Du wurdest vom Admin gekickt!');
+                            setTimeout(() => c.terminate(), 1000);
                         }
                     });
                     return;
@@ -189,7 +211,8 @@ wss.on('connection', function(ws, req) {
                 if (cmd === '/kickall') {
                     wss.clients.forEach(function(c) {
                         if (c !== ws) {
-                            c.terminate();
+                            sendSystemAlert(c, 'Der Server wurde vom Admin geleert.');
+                            setTimeout(() => c.terminate(), 1000);
                         }
                     });
                     return;
@@ -200,7 +223,8 @@ wss.on('connection', function(ws, req) {
                     wss.clients.forEach(function(c) {
                         if (c.playerName && c.playerName.toLowerCase() === targetLower) {
                             bannedIPs.add(c.clientIP);
-                            c.terminate();
+                            sendSystemAlert(c, '❌ DU WURDEST PERMANENT GEBANNT!');
+                            setTimeout(() => c.terminate(), 1000);
                         }
                     });
                     saveAll();
@@ -210,6 +234,12 @@ wss.on('connection', function(ws, req) {
                 // 7. /banip (Direkt)
                 if (cmd === '/banip') {
                     bannedIPs.add(target);
+                    wss.clients.forEach(c => {
+                        if(c.clientIP === target) {
+                            sendSystemAlert(c, '❌ DEINE IP WURDE GEBANNT!');
+                            setTimeout(() => c.terminate(), 1000);
+                        }
+                    });
                     saveAll();
                     return;
                 }
@@ -297,7 +327,7 @@ wss.on('connection', function(ws, req) {
                 }
             }
 
-            // --- SPIEL-KERNFUNKTIONEN (NICHTS GEKÜRZT) ---
+            // --- SPIEL-KERNFUNKTIONEN ---
 
             // Login / Registrierung
             if (data.type === 'join' || data.type === 'find_random') {
@@ -344,7 +374,7 @@ wss.on('connection', function(ws, req) {
                         return;
                     }
                     if (mutedPlayers.has(lowerName) && now < mutedPlayers.get(lowerName)) {
-                        ws.send(JSON.stringify({ type: 'chat', text: 'Du bist stummgeschaltet!', system: true }));
+                        sendSystemAlert(ws, '🔇 Du bist stummgeschaltet und kannst keine Nachrichten senden.');
                         return;
                     }
                     ws.lastMessageTime = now;
