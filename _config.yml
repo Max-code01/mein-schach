@@ -1,27 +1,32 @@
-# _config.yml - Das vollständige Profi-Setup für Max' Grandmaster Chess
-title: "Max' Grandmaster Chess"
+# _config.yml - Maximale Optimierung für dein Schach-Projekt
+title: "Schach"
 description: "High-End Schach-Engine mit Rust-Rechenpower, Python-Analyse und Tiefe 4 KI sowie Online-Multiplayer und Live-Chat."
 
-# Dein gewünschtes Design-Thema
+# Design-Konfiguration
 theme: jekyll-theme-slate
-
-# Spracheinstellungen
-lang: de_DE
-encoding: UTF-8
-
-# Die alten Funktionen, die auf jeden Fall bleiben müssen
 show_downloads: true
+google_analytics: 
 
-# SEO & Social Media (Damit die Vorschau bei WhatsApp/Discord perfekt ist)
+# --- NEUE VERBESSERUNGEN ---
+
+# Erlaubt Emoji-Shortcodes wie :chess_pawn: in deinen Texten
+emoji: true
+
+# SEO-Erweiterungen (Sorgt für bessere Google-Rankings)
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Detaillierte Social Media Infos
 twitter:
   username: max_chess
   card: summary_large_image
-  title: "Max' Grandmaster Chess - Online & KI"
-  description: "Tritt gegen die Tiefe 4 KI an oder chatte live mit Gegnern weltweit!"
+  title: "Schach Online: KI vs. Mensch"
+  description: "Erlebe Schach mit Python-Analyse und Rust-Engine direkt im Browser."
 
-# Platzhalter für zukünftige Statistiken
-google_analytics: 
+# Suchbegriffe für den GitHub-Algorithmus
+keywords: "Schach, Chess, AI, Python, Rust, Multiplayer, WebSocket"
 
-# Technische Tags für GitHub (Damit dein Projekt besser gefunden wird)
-kategorie: "Schach-Plattform"
-features: ["Rust Engine", "Python Stats", "JS Frontend", "WebSockets"]
+# Sprache & Zeit
+lang: de_DE
+timezone: Europe/Berlin
