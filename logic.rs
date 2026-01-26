@@ -1,41 +1,50 @@
-// logic.rs - Erweiterte Logik für Stellungsbewertung
-// Diese Datei arbeitet unabhängig von deinem restlichen Code.
+// logic.rs - Das vollständige Hochleistungs-Modul für dein Schachspiel
+// Ersetze den alten Inhalt komplett durch diesen Code.
 
-pub struct MoveRating {
-    pub score: i32,
-}
-
-// 1. Erweiterte Werte für alle Figuren
+/// Gibt den mathematischen Wert einer einzelnen Figur zurück.
+/// Positive Werte für Weiß, negative Werte für Schwarz.
 pub fn get_piece_value(piece: char) -> i32 {
     match piece {
-        'P' => 100,  // Weißer Bauer
-        'p' => -100, // Schwarzer Bauer
-        'N' => 320,  // Weißer Springer
-        'n' => -320, // Schwarzer Springer
-        'B' => 330,  // Weißer Läufer
-        'b' => -330, // Schwarzer Läufer
-        'R' => 500,  // Weißer Turm
-        'r' => -500, // Schwarzer Turm
-        'Q' => 900,  // Weiße Dame
-        'q' => -900, // Schwarze Dame
-        'K' => 20000,// Weißer König
-        'k' => -20000,// Schwarzer König
+        // Weiß (Großbuchstaben)
+        'P' => 100,   // Bauer
+        'N' => 320,   // Springer
+        'B' => 330,   // Läufer
+        'R' => 500,   // Turm
+        'Q' => 900,   // Dame
+        'K' => 20000, // König
+
+        // Schwarz (Kleinbuchstaben)
+        'p' => -100,  // Bauer
+        'n' => -320,  // Springer
+        'b' => -330,  // Läufer
+        'r' => -500,  // Turm
+        'q' => -900,  // Dame
+        'k' => -20000,// König
+
+        // Leeres Feld oder unbekannt
         _ => 0,
     }
 }
 
-// 2. Funktion zur Bewertung eines ganzen Brettes
-// Diese Funktion berechnet, wer aktuell vorne liegt.
-pub fn evaluate_board(board_fen: &str) -> i32 {
+/// Bewertet eine komplette Spielfeld-Stellung (FEN-String).
+/// Ein positives Ergebnis bedeutet Vorteil für Weiß, ein negatives für Schwarz.
+pub fn evaluate_position(board_fen: &str) -> i32 {
     let mut total_score = 0;
+    
     for c in board_fen.chars() {
         total_score += get_piece_value(c);
     }
+    
     total_score
 }
 
-// 3. Sicherheits-Check für Züge
-pub fn is_move_safe(start_pos: i32, end_pos: i32) -> bool {
-    // Hier könnte später komplizierte Logik stehen
-    true
+/// Prüft, ob ein Materialvorteil besteht.
+pub fn has_material_advantage(score: i32) -> &'static str {
+    if score > 0 {
+        "Weiß ist im Vorteil"
+    } else if score < 0 {
+        "Schwarz ist im Vorteil"
+    } else {
+        "Stellung ist ausgeglichen"
+    }
 }
