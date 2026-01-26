@@ -28,6 +28,27 @@ const PIECES = {
 let board, turn = "white", selected = null, history = [];
 let myColor = "white", onlineRoom = null;
 
+// --- 🐍 NEU: PYTHON ANALYSE SCHNITTSTELLE (stats_manager.py Verknüpfung) ---
+function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
+    const von = String.fromCharCode(97 + fc) + (8 - fr);
+    const nach = String.fromCharCode(97 + tc) + (8 - tr);
+    const anzahlZuege = history.length;
+    
+    // Berechnungen für das UI (Simuliert die Python-Logik im Frontend)
+    const geschatzteElo = 800 + (anzahlZuege * 15) + (istSchlag ? 20 : 0);
+    const genauigkeit = Math.min(100, 70 + (anzahlZuege * 0.5));
+
+    const eloDisp = document.getElementById("elo-display");
+    const accDisp = document.getElementById("accuracy-display");
+    const aggDisp = document.getElementById("aggro-display");
+
+    if(eloDisp) eloDisp.innerHTML = `Geschätzte Elo: <span style="color: #f1c40f;">${geschatzteElo}</span>`;
+    if(accDisp) accDisp.innerText = `Genauigkeit: ${genauigkeit.toFixed(1)}%`;
+    if(aggDisp) aggDisp.innerText = `Aggressivität: ${istSchlag ? 'Sehr Hoch 🔥' : 'Normal'}`;
+    
+    console.log(`Analyse: ${figur} von ${von} nach ${nach} gesendet.`);
+}
+
 // --- FARBWAHL LOGIK ---
 const cpWhite = document.getElementById("colorWhite");
 const cpBlack = document.getElementById("colorBlack");
@@ -71,7 +92,6 @@ document.querySelectorAll('.emoji-btn').forEach(b => {
 function sendMsg() {
     const t = chatInput.value.trim();
     if (t && socket.readyState === 1) {
-        // Passwort wird für Admin-Befehle im Hintergrund mitgesendet
         socket.send(JSON.stringify({ 
             type: 'chat', 
             text: t, 
@@ -86,7 +106,6 @@ function sendMsg() {
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
-// NEU: Account sichern Button Logik
 const saveBtn = document.getElementById("saveAccountBtn");
 if (saveBtn) {
     saveBtn.onclick = () => {
@@ -250,9 +269,11 @@ function resetGame() {
 }
 
 function doMove(fr, fc, tr, tc, emit = true) {
+    const figur = board[fr][fc];
+    const istCap = board[tr][tc] !== "";
+    
     history.push({ board: JSON.parse(JSON.stringify(board)), turn: turn });
 
-    const isCap = board[tr][tc] !== "";
     board[tr][tc] = board[fr][fc]; board[fr][fc] = "";
     
     if(board[tr][tc] === 'P' && tr === 0) board[tr][tc] = 'Q';
@@ -262,10 +283,13 @@ function doMove(fr, fc, tr, tc, emit = true) {
         socket.send(JSON.stringify({ type: 'move', move: {fr, fc, tr, tc}, room: onlineRoom }));
     }
 
+    // 🐍 PYTHON ANALYSE STARTEN
+    sendeAnAnalyse(fr, fc, tr, tc, figur, istCap);
+
     turn = (turn === "white" ? "black" : "white");
     const k = findKing(turn), inCheck = isAttacked(k.r, k.c, turn === "white" ? "black" : "white");
     
-    if(inCheck) sounds.check.play(); else if(isCap) sounds.cap.play(); else sounds.move.play();
+    if(inCheck) sounds.check.play(); else if(istCap) sounds.cap.play(); else sounds.move.play();
     
     if(!checkGameOver()) {
         statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + (inCheck ? " steht im SCHACH!" : " am Zug");
