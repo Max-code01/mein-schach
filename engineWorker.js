@@ -1,7 +1,6 @@
-/* ===== ENGINE WORKER (Vollständig) ===== */
+/* ===== HIGH-PERFORMANCE ENGINE WORKER (TIEFE 4) ===== */
 const VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
-// Hilfsfunktionen für den Worker
 function cloneBoard(board) { return board.map(r => [...r]); }
 
 function isOwn(p, turn) {
@@ -9,7 +8,6 @@ function isOwn(p, turn) {
     return turn === "white" ? p === p.toUpperCase() : p === p.toLowerCase();
 }
 
-// Grundlegende Zug-Validierung für die KI
 function canMoveSimple(board, fr, fc, tr, tc, turn) {
     const p = board[fr][fc];
     const t = board[tr][tc];
@@ -19,7 +17,6 @@ function canMoveSimple(board, fr, fc, tr, tc, turn) {
     const ar = Math.abs(dr), ac = Math.abs(dc);
     const type = p.toLowerCase();
 
-    // Vereinfachte Logik für den Worker
     if (type === 'p') {
         const dir = p === 'P' ? -1 : 1;
         if (dc === 0 && dr === dir && !t) return true;
@@ -37,7 +34,7 @@ function canMoveSimple(board, fr, fc, tr, tc, turn) {
 
 function isPathClear(board, fr, fc, tr, tc) {
     const dr = tr > fr ? 1 : tr < fr ? -1 : 0;
-    const dc = tc > fc ? 1 : tc < fc ? -1 : 0;
+    const dc = tc > fc ? 1 : dc < fc ? -1 : 0;
     let r = fr + dr, c = fc + dc;
     while (r !== tr || c !== tc) {
         if (board[r][c] !== "") return false;
@@ -46,33 +43,39 @@ function isPathClear(board, fr, fc, tr, tc) {
     return true;
 }
 
-// Zug-Generator
+// Optimierter Zug-Generator mit Priorisierung für Tiefe 4
 function generateMoves(board, turn) {
-    const moves = [];
+    let moves = [];
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             if (isOwn(board[r][c], turn)) {
                 for (let tr = 0; tr < 8; tr++) {
                     for (let tc = 0; tc < 8; tc++) {
                         if (canMoveSimple(board, r, c, tr, tc, turn)) {
-                            moves.push({ fr: r, fc: c, tr: tr, tc: tc });
+                            const target = board[tr][tc];
+                            // Schlagen ist bei Tiefe 4 extrem wichtig zuerst zu prüfen
+                            const priority = target ? VALUE[target.toLowerCase()] : 0;
+                            moves.push({ fr: r, fc: c, tr: tr, tc: tc, priority: priority });
                         }
                     }
                 }
             }
         }
     }
-    return moves;
+    return moves.sort((a, b) => b.priority - a.priority);
 }
 
-// Bewertung
 function evaluate(board) {
     let score = 0;
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const p = board[r][c];
             if (p) {
-                const val = VALUE[p.toLowerCase()] || 0;
+                let val = VALUE[p.toLowerCase()] || 0;
+                // Zentrums-Bonus für bessere Positionierung
+                if ((p.toLowerCase() === 'n' || p.toLowerCase() === 'p') && r > 2 && r < 5 && c > 2 && c < 5) {
+                    val += 15;
+                }
                 score += (p === p.toUpperCase() ? 1 : -1) * val;
             }
         }
@@ -80,7 +83,6 @@ function evaluate(board) {
     return score;
 }
 
-// Alpha-Beta Algorithmus
 function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
     if (depth === 0) return evaluate(board);
 
@@ -93,9 +95,9 @@ function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
             const b2 = cloneBoard(board);
             b2[m.tr][m.tc] = b2[m.fr][m.fc];
             b2[m.fr][m.fc] = "";
-            const score = alphaBeta(b2, depth - 1, alpha, beta, false, nextTurn);
-            maxEval = Math.max(maxEval, score);
-            alpha = Math.max(alpha, score);
+            const ev = alphaBeta(b2, depth - 1, alpha, beta, false, nextTurn);
+            maxEval = Math.max(maxEval, ev);
+            alpha = Math.max(alpha, ev);
             if (beta <= alpha) break;
         }
         return maxEval;
@@ -105,16 +107,15 @@ function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
             const b2 = cloneBoard(board);
             b2[m.tr][m.tc] = b2[m.fr][m.fc];
             b2[m.fr][m.fc] = "";
-            const score = alphaBeta(b2, depth - 1, alpha, beta, true, nextTurn);
-            minEval = Math.min(minEval, score);
-            beta = Math.min(beta, score);
+            const ev = alphaBeta(b2, depth - 1, alpha, beta, true, nextTurn);
+            minEval = Math.min(minEval, ev);
+            beta = Math.min(beta, ev);
             if (beta <= alpha) break;
         }
         return minEval;
     }
 }
 
-/* ===== MESSAGE HANDLER ===== */
 onmessage = function(e) {
     const { board, turn } = e.data;
     const moves = generateMoves(board, turn);
@@ -126,7 +127,7 @@ onmessage = function(e) {
 
     let bestMove = moves[0];
     let bestScore = turn === "white" ? -Infinity : Infinity;
-    const depth = 2; // Tiefe für flüssiges Spiel
+    const depth = 4; // ACHTUNG: Hier ist die neue Tiefe 4!
 
     for (const m of moves) {
         const b2 = cloneBoard(board);
@@ -143,6 +144,5 @@ onmessage = function(e) {
             bestMove = m;
         }
     }
-    
     postMessage(bestMove);
 };
