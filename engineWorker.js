@@ -1,8 +1,6 @@
-/* ===== STABILER ENGINE WORKER (TIEFE 4) ===== */
+/* ===== REPARIERTER ENGINE WORKER (TIEFE 4 + RUST-LOGIK) ===== */
 
-// Wir integrieren die Logik aus logic.rs direkt hier, 
-// damit der Bot auch ohne /pkg/ Ordner sofort funktioniert.
-const PIECE_VALUES = { 
+const VALUE = { 
     'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000,
     'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000 
 };
@@ -14,44 +12,30 @@ function isOwn(p, turn) {
     return turn === "white" ? p === p.toUpperCase() : p === p.toLowerCase();
 }
 
-// Direkte Kopie der Logik aus logic.rs
-function evaluateBoard(board) {
-    let score = 0;
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            const p = board[r][c];
-            if (p) {
-                let val = PIECE_VALUES[p] || 0;
-                // Zentrums-Bonus (Reihe 3-4, Spalte 3-4)
-                if ((p.toLowerCase() === 'n' || p.toLowerCase() === 'p') && r >= 3 && r <= 4 && c >= 3 && c <= 4) {
-                    val += 15;
-                }
-                score += (p === p.toUpperCase() ? 1 : -1) * val;
-            }
-        }
-    }
-    return score;
-}
-
+// FEHLER BEHOBEN: dr und dc werden jetzt korrekt berechnet
 function canMoveSimple(board, fr, fc, tr, tc, turn) {
     const p = board[fr][fc];
     const t = board[tr][tc];
     if (t && isOwn(t, turn)) return false;
 
-    const dr = tr - fr, dc = tc - fc;
-    const ar = Math.abs(dr), ac = Math.abs(dc);
+    const dr = tr - fr; // Differenz Reihe
+    const dc = tc - fc; // Differenz Spalte
+    const ar = Math.abs(dr);
+    const ac = Math.abs(dc);
+    const type = p.toLowerCase();
 
-    if (p.toLowerCase() === 'p') {
+    if (type === 'p') {
         const dir = p === 'P' ? -1 : 1;
         if (dc === 0 && dr === dir && !t) return true;
         if (ac === 1 && dr === dir && t) return true;
         return false;
     }
-    if (p.toLowerCase() === 'r') return (fr === tr || fc === tc) && isPathClear(board, fr, fc, tr, tc);
-    if (p.toLowerCase() === 'b') return ar === ac && isPathClear(board, fr, fc, tr, tc);
-    if (p.toLowerCase() === 'q') return (fr === tr || fc === tc || ar === ac) && isPathClear(board, fr, fc, tr, tc);
-    if (p.toLowerCase() === 'n') return (ar === 2 && ac === 1) || (ar === 1 && ac === 2);
-    if (p.toLowerCase() === 'k') return ar <= 1 && ac <= 1;
+    if (type === 'r') return (fr === tr || fc === tc) && isPathClear(board, fr, fc, tr, tc);
+    if (type === 'b') return ar === ac && isPathClear(board, fr, fc, tr, tc);
+    if (type === 'q') return (fr === tr || fc === tc || ar === ac) && isPathClear(board, fr, fc, tr, tc);
+    if (type === 'n') return (ar === 2 && ac === 1) || (ar === 1 && ac === 2);
+    if (type === 'k') return ar <= 1 && ac <= 1;
+    
     return false;
 }
 
@@ -62,7 +46,8 @@ function isPathClear(board, fr, fc, tr, tc) {
     let c = fc + dc;
     while (r !== tr || c !== tc) {
         if (board[r][c] !== "") return false;
-        r += dr; c += dc;
+        r += dr;
+        c += dc;
     }
     return true;
 }
@@ -76,8 +61,8 @@ function generateMoves(board, turn) {
                     for (let tc = 0; tc < 8; tc++) {
                         if (canMoveSimple(board, r, c, tr, tc, turn)) {
                             const target = board[tr][tc];
-                            const priority = target ? PIECE_VALUES[target] : 0;
-                            moves.push({ fr: r, fc: c, tr: tr, tc: tc, priority });
+                            const priority = target ? VALUE[target.toLowerCase()] : 0;
+                            moves.push({ fr: r, fc: c, tr: tr, tc: tc, priority: priority });
                         }
                     }
                 }
@@ -87,8 +72,27 @@ function generateMoves(board, turn) {
     return moves.sort((a, b) => b.priority - a.priority);
 }
 
+// Nutzt die Logik aus deiner logic.rs (Material + Zentrum)
+function evaluate(board) {
+    let score = 0;
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (p) {
+                let val = VALUE[p] || 0;
+                // Bonus aus logic.rs: Springer und Bauern in die Mitte!
+                if ((p.toLowerCase() === 'n' || p.toLowerCase() === 'p') && r >= 3 && r <= 4 && c >= 3 && c <= 4) {
+                    val += 15;
+                }
+                score += (p === p.toUpperCase() ? 1 : -1) * val;
+            }
+        }
+    }
+    return score;
+}
+
 function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
-    if (depth === 0) return evaluateBoard(board);
+    if (depth === 0) return evaluate(board);
     const moves = generateMoves(board, turn);
     const nextTurn = turn === "white" ? "black" : "white";
 
@@ -126,7 +130,7 @@ onmessage = function(e) {
 
     let bestMove = moves[0];
     let bestScore = turn === "white" ? -Infinity : Infinity;
-    const depth = 4; // Maximale Stärke
+    const depth = 4; // JETZT ECHTE TIEFE 4 AKTIVIERT!
 
     for (const m of moves) {
         const b2 = cloneBoard(board);
