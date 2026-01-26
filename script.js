@@ -4,6 +4,7 @@ const chatMessages = document.getElementById("chat-messages");
 const chatInput = document.getElementById("chat-input");
 const gameModeSelect = document.getElementById("gameMode");
 const nameInput = document.getElementById("playerName");
+const passInput = document.getElementById("playerPass"); // Neu für Passwort
 
 // --- 1. KONFIGURATION ---
 let stockfishWorker = new Worker('engineWorker.js'); 
@@ -40,13 +41,13 @@ if (cpWhite && cpBlack) {
 }
 
 function getMyName() { return nameInput.value.trim() || "Spieler_" + Math.floor(Math.random()*999); }
+function getMyPass() { return passInput ? passInput.value : ""; }
 
-// --- 2. CHAT & SYSTEM (AKTUALISIERT FÜR SICHERHEIT) ---
+// --- 2. CHAT & SYSTEM ---
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
     
-    // Wir nutzen hier textContent, um HTML-Ausführung zu verhindern
     if (type === "system") {
         m.textContent = "⚙️ " + text;
     } else {
@@ -70,18 +71,39 @@ document.querySelectorAll('.emoji-btn').forEach(b => {
 function sendMsg() {
     const t = chatInput.value.trim();
     if (t && socket.readyState === 1) {
-        socket.send(JSON.stringify({ type: 'chat', text: t, sender: getMyName(), room: onlineRoom }));
-        addChat("Ich", t, "me"); chatInput.value = "";
+        // Passwort wird für Admin-Befehle im Hintergrund mitgesendet
+        socket.send(JSON.stringify({ 
+            type: 'chat', 
+            text: t, 
+            sender: getMyName(), 
+            password: getMyPass(), 
+            room: onlineRoom 
+        }));
+        addChat("Ich", t, "me"); 
+        chatInput.value = "";
     }
 }
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
+// NEU: Account sichern Button Logik
+const saveBtn = document.getElementById("saveAccountBtn");
+if (saveBtn) {
+    saveBtn.onclick = () => {
+        socket.send(JSON.stringify({
+            type: 'join',
+            playerName: getMyName(),
+            password: getMyPass()
+        }));
+        const status = document.getElementById("save-status");
+        if (status) status.textContent = "✅ Profil gesendet!";
+    };
+}
+
 // --- 3. SERVER EVENT HANDLING ---
 socket.onmessage = (e) => {
     const d = JSON.parse(e.data);
     switch(d.type) {
-        // --- NEU: SYSTEM-ALERT (FÜR BANS/MUTES/KICKS) ---
         case 'system_alert':
             alert("🚨 ADMIN-MELDUNG: " + d.message);
             addChat("SYSTEM", d.message, "system");
@@ -97,19 +119,27 @@ socket.onmessage = (e) => {
             addChat("System", d.systemMsg || `Raum ${d.room} verbunden.`, "system");
             resetGame();
             break;
+
         case 'move':
             if (gameModeSelect.value === "online" || gameModeSelect.value === "random") {
                 doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false);
             }
             break;
+
         case 'chat':
             addChat(d.sender, d.text, "other");
             break;
+
         case 'user-count':
-            document.getElementById("user-counter").textContent = "Online: " + d.count;
+            const counter = document.getElementById("user-counter");
+            if (counter) counter.textContent = "Online: " + d.count;
             break;
+
         case 'leaderboard':
-            document.getElementById("leaderboard-list").innerHTML = d.list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
+            const lbList = document.getElementById("leaderboard-list");
+            if (lbList) {
+                lbList.innerHTML = d.list.map((p, i) => `<div>${i+1}. ${p.name} (${p.wins} 🏆)</div>`).join('');
+            }
             break;
     }
 };
@@ -126,7 +156,12 @@ gameModeSelect.onchange = () => {
 
 document.getElementById("connectMP").onclick = () => {
     const r = document.getElementById("roomID").value || "global";
-    socket.send(JSON.stringify({ type: 'join', room: r, name: getMyName() }));
+    socket.send(JSON.stringify({ 
+        type: 'join', 
+        room: r, 
+        playerName: getMyName(), 
+        password: getMyPass() 
+    }));
 };
 
 // --- 4. REGELN & SCHACH-LOGIK ---
