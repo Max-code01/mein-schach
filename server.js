@@ -29,7 +29,23 @@ let lastSentMessage = new Map();
 
 const adminPass = "geheim123";
 
-// --- NEU: HILFSFUNKTION FÜR POPUP-NACHRICHTEN ---
+// --- NEU: HILFSFUNKTION FÜR DAS LEADERBOARD (Top 10) ---
+function sendLeaderboardUpdate(target) {
+    const sorted = Object.entries(leaderboard).sort((a,b) => b[1]-a[1]).slice(0, 10);
+    const msg = JSON.stringify({ 
+        type: 'leaderboard', 
+        list: sorted.map(e => ({ name: e[0], wins: e[1] })) 
+    });
+    if (target) {
+        target.send(msg);
+    } else {
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) client.send(msg);
+        });
+    }
+}
+
+// --- HILFSFUNKTION FÜR POPUP-NACHRICHTEN ---
 const sendSystemAlert = (targetWs, message) => {
     if (targetWs && targetWs.readyState === WebSocket.OPEN) {
         targetWs.send(JSON.stringify({ 
@@ -117,6 +133,13 @@ wss.on('connection', function(ws, req) {
         setTimeout(() => ws.terminate(), 1000);
         return;
     }
+
+    // NEU: Sofort Namen zuweisen und Leaderboard schicken
+    if (!ws.playerName) {
+        const tempID = Math.floor(1000 + Math.random() * 9000);
+        ws.playerName = "Spieler_" + tempID;
+    }
+    sendLeaderboardUpdate(ws);
 
     ws.on('message', function(message) {
         try {
@@ -218,7 +241,7 @@ wss.on('connection', function(ws, req) {
                     return;
                 }
 
-                // 6. /ban (Name -> IP)
+                // 6. /ban
                 if (cmd === '/ban') {
                     wss.clients.forEach(function(c) {
                         if (c.playerName && c.playerName.toLowerCase() === targetLower) {
@@ -231,7 +254,7 @@ wss.on('connection', function(ws, req) {
                     return;
                 }
 
-                // 7. /banip (Direkt)
+                // 7. /banip
                 if (cmd === '/banip') {
                     bannedIPs.add(target);
                     wss.clients.forEach(c => {
@@ -244,7 +267,7 @@ wss.on('connection', function(ws, req) {
                     return;
                 }
 
-                // 8. /pardon (Entbannen)
+                // 8. /pardon
                 if (cmd === '/pardon') {
                     bannedIPs.delete(target);
                     saveAll();
@@ -394,13 +417,12 @@ wss.on('connection', function(ws, req) {
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
-            // Siege & Bestenliste
+            // Siege & Bestenliste (Top 10)
             if (data.type === 'win') {
                 const name = data.name || ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
                 saveAll();
-                const sorted = Object.entries(leaderboard).sort((a,b) => b[1]-a[1]).slice(0, 5);
-                broadcast({ type: 'leaderboard', list: sorted.map(e => ({ name: e[0], wins: e[1] })) });
+                sendLeaderboardUpdate();
             }
 
         } catch (e) {
