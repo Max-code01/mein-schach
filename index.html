@@ -31,6 +31,16 @@
                 <div id="user-counter">Online: 1 ● Live</div>
             </div>
 
+            <div class="glass-panel" id="python-lab" style="border-left: 4px solid #3498db;">
+                <span>🐍 <strong>KI-Analyse (Python-Labor)</strong></span>
+                <div style="margin-top: 10px; font-size: 0.9em; display: flex; flex-direction: column; gap: 5px;">
+                    <div id="elo-display">Geschätzte Elo: <span style="color: #f1c40f;">Warte auf Spiel...</span></div>
+                    <div id="accuracy-display">Genauigkeit: 0%</div>
+                    <div id="aggro-display">Aggressivität: Normal</div>
+                    <div id="material-display">Gewonnenes Material: 0</div>
+                </div>
+            </div>
+
             <div class="glass-panel">
                 <span>🎨 <strong>Board Design</strong></span>
                 <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
@@ -83,8 +93,8 @@
 
     <script type="module">
         console.log("🦀 Rust-Logik (logic.rs) wurde im Projekt registriert.");
+        console.log("🐍 Python-Labor (stats_manager.py) bereit für Daten.");
         
-        // Diese Funktion kannst du jetzt nutzen, um die neue Sprache zu testen
         window.checkRustStatus = function() {
             alert("Die Verbindung zur Rust-Datei logic.rs steht bereit!");
         };
