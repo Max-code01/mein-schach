@@ -1,4 +1,4 @@
-/* ===== HIGH-PERFORMANCE ENGINE WORKER (TIEFE 4) ===== */
+/* ===== REPARIERTER ENGINE WORKER (TIEFE 4) ===== */
 const VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
 
 function cloneBoard(board) { return board.map(r => [...r]); }
@@ -32,18 +32,20 @@ function canMoveSimple(board, fr, fc, tr, tc, turn) {
     return false;
 }
 
+// HIER WAR DER FEHLER - JETZT KORRIGIERT:
 function isPathClear(board, fr, fc, tr, tc) {
     const dr = tr > fr ? 1 : tr < fr ? -1 : 0;
-    const dc = tc > fc ? 1 : dc < fc ? -1 : 0;
-    let r = fr + dr, c = fc + dc;
+    const dc = tc > fc ? 1 : tc < fc ? -1 : 0;
+    let r = fr + dr;
+    let c = fc + dc;
     while (r !== tr || c !== tc) {
         if (board[r][c] !== "") return false;
-        r += dr; c += dc;
+        r += dr;
+        c += dc;
     }
     return true;
 }
 
-// Optimierter Zug-Generator mit Priorisierung für Tiefe 4
 function generateMoves(board, turn) {
     let moves = [];
     for (let r = 0; r < 8; r++) {
@@ -53,7 +55,6 @@ function generateMoves(board, turn) {
                     for (let tc = 0; tc < 8; tc++) {
                         if (canMoveSimple(board, r, c, tr, tc, turn)) {
                             const target = board[tr][tc];
-                            // Schlagen ist bei Tiefe 4 extrem wichtig zuerst zu prüfen
                             const priority = target ? VALUE[target.toLowerCase()] : 0;
                             moves.push({ fr: r, fc: c, tr: tr, tc: tc, priority: priority });
                         }
@@ -72,7 +73,6 @@ function evaluate(board) {
             const p = board[r][c];
             if (p) {
                 let val = VALUE[p.toLowerCase()] || 0;
-                // Zentrums-Bonus für bessere Positionierung
                 if ((p.toLowerCase() === 'n' || p.toLowerCase() === 'p') && r > 2 && r < 5 && c > 2 && c < 5) {
                     val += 15;
                 }
@@ -85,10 +85,8 @@ function evaluate(board) {
 
 function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
     if (depth === 0) return evaluate(board);
-
     const moves = generateMoves(board, turn);
     const nextTurn = turn === "white" ? "black" : "white";
-
     if (maximizing) {
         let maxEval = -Infinity;
         for (const m of moves) {
@@ -109,7 +107,7 @@ function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
             b2[m.fr][m.fc] = "";
             const ev = alphaBeta(b2, depth - 1, alpha, beta, true, nextTurn);
             minEval = Math.min(minEval, ev);
-            beta = Math.min(beta, ev);
+            beta = Math.min(beta, score = ev);
             if (beta <= alpha) break;
         }
         return minEval;
@@ -119,23 +117,15 @@ function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
 onmessage = function(e) {
     const { board, turn } = e.data;
     const moves = generateMoves(board, turn);
-    
-    if (moves.length === 0) {
-        postMessage(null);
-        return;
-    }
-
+    if (moves.length === 0) { postMessage(null); return; }
     let bestMove = moves[0];
     let bestScore = turn === "white" ? -Infinity : Infinity;
-    const depth = 4; // ACHTUNG: Hier ist die neue Tiefe 4!
-
+    const depth = 4;
     for (const m of moves) {
         const b2 = cloneBoard(board);
         b2[m.tr][m.tc] = b2[m.fr][m.fc];
         b2[m.fr][m.fc] = "";
-        
         const score = alphaBeta(b2, depth - 1, -Infinity, Infinity, turn !== "white", turn === "white" ? "black" : "white");
-        
         if (turn === "white" && score > bestScore) {
             bestScore = score;
             bestMove = m;
