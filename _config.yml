@@ -1,31 +1,41 @@
-# _config.yml - Maximale Optimierung für dein Schach-Projekt
+# _config.yml - Komplette Schach-Plattform Konfiguration
 title: "Schach"
 description: "High-End Schach-Engine mit Rust-Rechenpower, Python-Analyse und Tiefe 4 KI sowie Online-Multiplayer und Live-Chat."
 
 # Design-Konfiguration
 theme: jekyll-theme-slate
 show_downloads: true
-google_analytics: 
+google_analytics: ""
 
-# --- NEUE VERBESSERUNGEN ---
+# --- DEINE 5 SPRACHEN & FEATURES ---
+features:
+  - "Rust Engine"
+  - "Python Stats"
+  - "JavaScript Frontend"
+  - "JSON Data Structure"
+  - "YAML Configuration"
+  - "WebSockets"
 
-# Erlaubt Emoji-Shortcodes wie :chess_pawn: in deinen Texten
-emoji: true
+# --- GOOGLE & SEO FIX (WICHTIG!) ---
+url: "https://max-code01.github.io"
+baseurl: "/mein-schach"
 
-# SEO-Erweiterungen (Sorgt für bessere Google-Rankings)
+# Plugins für Google-Suche und Sitemap
 plugins:
   - jekyll-seo-tag
   - jekyll-sitemap
 
-# Detaillierte Social Media Infos
+# --- ZUSÄTZLICHE OPTIMIERUNGEN ---
+emoji: true
+
 twitter:
   username: max_chess
   card: summary_large_image
   title: "Schach Online: KI vs. Mensch"
   description: "Erlebe Schach mit Python-Analyse und Rust-Engine direkt im Browser."
 
-# Suchbegriffe für den GitHub-Algorithmus
-keywords: "Schach, Chess, AI, Python, Rust, Multiplayer, WebSocket"
+# Suchbegriffe für Google & GitHub
+keywords: "Schach, Chess, AI, Python, Rust, Multiplayer, WebSocket, JSON, Max"
 
 # Sprache & Zeit
 lang: de_DE
