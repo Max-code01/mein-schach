@@ -100,11 +100,45 @@
     <script src="script.js"></script>
 
     <script type="module">
+        // 1. ZUSATZ: SUPABASE CLIENT INITIALISIERUNG
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+        const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
+        const supabaseKey = 'sb_publishable_H_ZV5me7vxZN_fNPdQOiFa_-_7AdGnZ'
+        const supabase = createClient(supabaseUrl, supabaseKey)
+
+        // 2. DEIN ORIGINAL: KONSOLEN LOGS
         console.log("🦀 Rust-Logik (logic.rs) wurde im Projekt registriert.");
         console.log("🐍 Python-Labor (stats_manager.py) bereit für Daten.");
         
         // Go-Monitoring (Neu hinzugefügt)
         console.log("💙 Go-Backend (stats.go) Performance-Check läuft.");
+
+        // 3. ZUSATZ: SPEICHER-LOGIK FÜR DIE DATENBANK
+        document.getElementById('saveAccountBtn').addEventListener('click', async () => {
+            const name = document.getElementById('playerName').value;
+            const pass = document.getElementById('playerPass').value;
+            const status = document.getElementById('save-status');
+
+            if (!name || !pass) {
+                status.innerHTML = "<span style='color: #ff4444;'>❌ Bitte alles ausfüllen!</span>";
+                return;
+            }
+
+            status.innerText = "⏳ Speichere...";
+
+            const { error } = await supabase
+                .from('players')
+                .insert([{ username: name, password: pass, elo: 1500 }]);
+
+            if (error) {
+                status.innerHTML = "<span style='color: #ff4444;'>❌ Fehler: " + error.message + "</span>";
+                console.error("Fehler beim Speichern:", error);
+            } else {
+                status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
+            }
+        });
+
+        // 4. DEIN ORIGINAL: INTERVALL UND RUST-FUNKTION
         setInterval(() => {
             const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
             const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
