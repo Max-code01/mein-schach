@@ -247,8 +247,31 @@ function checkGameOver() {
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
-            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', name: getMyName() }));
-        } else { statusEl.textContent = "PATT! Unentschieden."; }
+           async function saveWinToSupabase(name) {
+    if (!window.supabase) return;
+
+    // Wir schauen nach dem Spieler
+    const { data } = await window.supabase
+        .from('players')
+        .select('wins')
+        .eq('username', name)
+        .single();
+
+    if (data) {
+        // Spieler gefunden -> Siege +1
+        await window.supabase
+            .from('players')
+            .update({ wins: (data.wins || 0) + 1 })
+            .eq('username', name);
+        console.log("Sieg für " + name + " aktualisiert!");
+    } else {
+        // Spieler neu -> Mit 1 Sieg anlegen
+        await window.supabase
+            .from('players')
+            .insert([{ username: name, wins: 1, elo: 1500 }]);
+        console.log("Neuer Spieler " + name + " mit Sieg angelegt!");
+    }
+}
         return true;
     }
     return false;
@@ -387,3 +410,4 @@ stockfishWorker.onmessage = (e) => {
 };
 
 resetGame();
+
