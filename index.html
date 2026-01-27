@@ -91,8 +91,9 @@
             </div>
 
             <div class="glass-panel">
-                <span>🏆 <strong>Beste Spieler(nur für angemeldete Spieler)</strong></span>
-                <div id="leaderboard-list"></div>
+                <span>🏆 <strong>Beste Spieler</strong></span>
+                <div id="leaderboard-list" style="margin-top: 10px; font-size: 0.9em;">
+                    </div>
             </div>
         </div>
     </div>
@@ -100,23 +101,44 @@
     <script src="script.js"></script>
 
     <script type="module">
-        // 1. ZUSATZ: SUPABASE CLIENT INITIALISIERUNG
+        // 1. SUPABASE INITIALISIERUNG
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
         const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
         const supabaseKey = 'sb_publishable_H_ZV5me7vxZN_fNPdQOiFa_-_7AdGnZ'
         const supabase = createClient(supabaseUrl, supabaseKey)
-
-        // Macht supabase global verfügbar für die script.js (für saveWinToSupabase)
+        
+        // Supabase global verfügbar machen für deine script.js
         window.supabase = supabase;
 
-        // 2. DEIN ORIGINAL: KONSOLEN LOGS
+        // 2. FUNKTION: BESTENLISTE AUS DER DATENBANK LADEN
+        async function loadLeaderboard() {
+            const { data, error } = await supabase
+                .from('players')
+                .select('username, wins')
+                .order('wins', { ascending: false })
+                .limit(10);
+
+            const listEl = document.getElementById('leaderboard-list');
+            if (error) {
+                console.error("Fehler beim Laden des Leaderboards:", error);
+                return;
+            }
+            if (data && listEl) {
+                listEl.innerHTML = data.map((p, i) => 
+                    `<div style="display:flex; justify-content:between; border-bottom:1px solid #444; padding:2px 0;">
+                        <span>${i+1}. ${p.username}</span>
+                        <span style="margin-left:auto; color:#f1c40f;">${p.wins || 0} 🏆</span>
+                    </div>`
+                ).join('');
+            }
+        }
+
+        // 3. DEIN ORIGINAL: KONSOLEN LOGS
         console.log("🦀 Rust-Logik (logic.rs) wurde im Projekt registriert.");
         console.log("🐍 Python-Labor (stats_manager.py) bereit für Daten.");
-        
-        // Go-Monitoring (Neu hinzugefügt)
         console.log("💙 Go-Backend (stats.go) Performance-Check läuft.");
 
-        // 3. ZUSATZ: SPEICHER-LOGIK FÜR DIE DATENBANK (Profil sichern)
+        // 4. PROFIL SPEICHERN LOGIK
         document.getElementById('saveAccountBtn').addEventListener('click', async () => {
             const name = document.getElementById('playerName').value;
             const pass = document.getElementById('playerPass').value;
@@ -129,20 +151,20 @@
 
             status.innerText = "⏳ Speichere...";
 
-            // Nutzt upsert, damit Spieler bei Namensgleichheit aktualisiert werden
+            // Nutzt upsert, um Profil zu erstellen oder Passwort zu aktualisieren
             const { error } = await supabase
                 .from('players')
                 .upsert([{ username: name, password: pass, elo: 1500 }], { onConflict: 'username' });
 
             if (error) {
                 status.innerHTML = "<span style='color: #ff4444;'>❌ Fehler: " + error.message + "</span>";
-                console.error("Fehler beim Speichern:", error);
             } else {
                 status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
+                loadLeaderboard(); // Liste direkt aktualisieren
             }
         });
 
-        // 4. DEIN ORIGINAL: INTERVALL UND RUST-FUNKTION
+        // 5. DEIN ORIGINAL: INTERVALL UND RUST-FUNKTION
         setInterval(() => {
             const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
             const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
@@ -153,6 +175,12 @@
         window.checkRustStatus = function() {
             alert("Die Verbindung zur Rust-Datei logic.rs steht bereit!");
         };
+
+        // Initiales Laden beim Starten der Seite
+        loadLeaderboard();
+        // Leaderboard alle 30 Sekunden im Hintergrund aktualisieren
+        setInterval(loadLeaderboard, 30000);
+
     </script>
 </body>
 </html>
