@@ -97,23 +97,26 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <script src="script.js"></script>
 
     <script type="module">
-        // 1. ZUSATZ: SUPABASE CLIENT INITIALISIERUNG
+        // 3. Supabase Client Initialisierung (Wichtig für die Bestenliste)
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
         const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
         const supabaseKey = 'sb_publishable_H_ZV5me7vxZN_fNPdQOiFa_-_7AdGnZ'
         const supabase = createClient(supabaseUrl, supabaseKey)
+        
+        // Macht supabase global verfügbar für script.js
+        window.supabase = supabase;
 
-        // 2. DEIN ORIGINAL: KONSOLEN LOGS
+        // --- DEIN ORIGINAL: KONSOLEN LOGS ---
         console.log("🦀 Rust-Logik (logic.rs) wurde im Projekt registriert.");
         console.log("🐍 Python-Labor (stats_manager.py) bereit für Daten.");
-        
-        // Go-Monitoring (Neu hinzugefügt)
         console.log("💙 Go-Backend (stats.go) Performance-Check läuft.");
 
-        // 3. ZUSATZ: SPEICHER-LOGIK FÜR DIE DATENBANK
+        // --- SPEICHER-LOGIK (Verbindung UI -> Supabase) ---
         document.getElementById('saveAccountBtn').addEventListener('click', async () => {
             const name = document.getElementById('playerName').value;
             const pass = document.getElementById('playerPass').value;
@@ -128,7 +131,7 @@
 
             const { error } = await supabase
                 .from('players')
-                .insert([{ username: name, password: pass, elo: 1500 }]);
+                .upsert([{ username: name, password: pass, elo: 1500 }], { onConflict: 'username' });
 
             if (error) {
                 status.innerHTML = "<span style='color: #ff4444;'>❌ Fehler: " + error.message + "</span>";
@@ -138,7 +141,7 @@
             }
         });
 
-        // 4. DEIN ORIGINAL: INTERVALL UND RUST-FUNKTION
+        // --- DEIN ORIGINAL: INTERVALL ---
         setInterval(() => {
             const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
             const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
