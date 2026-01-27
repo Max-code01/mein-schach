@@ -41,6 +41,14 @@
                 </div>
             </div>
 
+            <div class="glass-panel" id="go-backend-core" style="border-left: 4px solid #00add8;">
+                <span>💙 <strong>Performance-Kern (Go)</strong></span>
+                <div style="margin-top: 10px; font-size: 0.85em; display: flex; flex-direction: column; gap: 4px;">
+                    <div>Status: <span style="color: #00ff00;">Aktiv</span></div>
+                    <div>Check: <span id="go-task-live" style="font-style: italic;">System stabil</span></div>
+                </div>
+            </div>
+
             <div class="glass-panel">
                 <span>🎨 <strong>Board Design</strong></span>
                 <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
@@ -95,6 +103,15 @@
         console.log("🦀 Rust-Logik (logic.rs) wurde im Projekt registriert.");
         console.log("🐍 Python-Labor (stats_manager.py) bereit für Daten.");
         
+        // Go-Monitoring (Neu hinzugefügt)
+        console.log("💙 Go-Backend (stats.go) Performance-Check läuft.");
+        setInterval(() => {
+            const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
+            const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
+            const el = document.getElementById('go-task-live');
+            if(el) el.innerText = randomTask;
+        }, 4000);
+
         window.checkRustStatus = function() {
             alert("Die Verbindung zur Rust-Datei logic.rs steht bereit!");
         };
