@@ -97,26 +97,26 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <script src="script.js"></script>
 
     <script type="module">
-        // 3. Supabase Client Initialisierung (Wichtig für die Bestenliste)
+        // 1. ZUSATZ: SUPABASE CLIENT INITIALISIERUNG
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
         const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
         const supabaseKey = 'sb_publishable_H_ZV5me7vxZN_fNPdQOiFa_-_7AdGnZ'
         const supabase = createClient(supabaseUrl, supabaseKey)
-        
-        // Macht supabase global verfügbar für script.js
+
+        // Macht supabase global verfügbar für die script.js (für saveWinToSupabase)
         window.supabase = supabase;
 
-        // --- DEIN ORIGINAL: KONSOLEN LOGS ---
+        // 2. DEIN ORIGINAL: KONSOLEN LOGS
         console.log("🦀 Rust-Logik (logic.rs) wurde im Projekt registriert.");
         console.log("🐍 Python-Labor (stats_manager.py) bereit für Daten.");
+        
+        // Go-Monitoring (Neu hinzugefügt)
         console.log("💙 Go-Backend (stats.go) Performance-Check läuft.");
 
-        // --- SPEICHER-LOGIK (Verbindung UI -> Supabase) ---
+        // 3. ZUSATZ: SPEICHER-LOGIK FÜR DIE DATENBANK (Profil sichern)
         document.getElementById('saveAccountBtn').addEventListener('click', async () => {
             const name = document.getElementById('playerName').value;
             const pass = document.getElementById('playerPass').value;
@@ -129,6 +129,7 @@
 
             status.innerText = "⏳ Speichere...";
 
+            // Nutzt upsert, damit Spieler bei Namensgleichheit aktualisiert werden
             const { error } = await supabase
                 .from('players')
                 .upsert([{ username: name, password: pass, elo: 1500 }], { onConflict: 'username' });
@@ -141,7 +142,7 @@
             }
         });
 
-        // --- DEIN ORIGINAL: INTERVALL ---
+        // 4. DEIN ORIGINAL: INTERVALL UND RUST-FUNKTION
         setInterval(() => {
             const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
             const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
