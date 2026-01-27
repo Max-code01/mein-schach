@@ -247,7 +247,14 @@ function checkGameOver() {
         if(inCheck) {
             const winner = turn === "white" ? "Schwarz" : "Weiß";
             statusEl.textContent = `MATT! ${winner} GEWINNT!`;
-            if(socket.readyState === 1) socket.send(JSON.stringify({ type: 'win', name: getMyName() }));
+            
+            // --- NEUER ABSCHNITT FÜR SUPABASE ---
+            if(socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'win', name: getMyName() }));
+                if (window.supabase) {
+                    saveWinToSupabase(getMyName());
+                }
+            }
         } else { statusEl.textContent = "PATT! Unentschieden."; }
         return true;
     }
@@ -385,5 +392,16 @@ document.getElementById("resignBtn").onclick = () => {
 stockfishWorker.onmessage = (e) => {
     if(e.data && turn === "black") setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600);
 };
+
+// --- HILFSFUNKTION FÜR SUPABASE (Ganz unten angehängt) ---
+async function saveWinToSupabase(name) {
+    if (!window.supabase) return;
+    const { data } = await window.supabase.from('players').select('wins').eq('username', name).single();
+    if (data) {
+        await window.supabase.from('players').update({ wins: (data.wins || 0) + 1 }).eq('username', name);
+    } else {
+        await window.supabase.from('players').insert([{ username: name, wins: 1, elo: 1500 }]);
+    }
+}
 
 resetGame();
