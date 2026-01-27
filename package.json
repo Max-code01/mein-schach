@@ -1,11 +1,25 @@
 {
   "name": "schach-multiplayer",
   "version": "1.0.0",
+  "description": "High-End Schach mit Rust-Engine, Python-Analyse und Live-Chat",
   "main": "server.js",
+  "author": "Max",
+  "license": "MIT",
   "dependencies": {
     "ws": "^8.0.0"
   },
   "scripts": {
     "start": "node server.js"
+  },
+  "keywords": [
+    "chess",
+    "rust",
+    "python",
+    "multiplayer",
+    "websocket"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/max-code01/mein-schach"
   }
 }
