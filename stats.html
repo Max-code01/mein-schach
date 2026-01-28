@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css"> <title>Schach Live | Globales Leaderboard</title>
+    <style>
+        .stats-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        .stats-card {
+            width: 100%;
+            max-width: 650px;
+            margin-top: 20px;
+        }
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .leaderboard-table th, .leaderboard-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .leaderboard-table th {
+            color: #f1c40f;
+            text-transform: uppercase;
+            font-size: 0.85em;
+        }
+        .back-btn {
+            text-decoration: none;
+            color: white;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 8px;
+            transition: 0.3s;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .back-btn:hover {
+            background: #007bff;
+        }
+        .rank-highlight { color: #f1c40f; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="stats-wrapper">
+        <a href="index.html" class="back-btn">← Zurück zum Spiel</a>
+
+        <div class="glass-panel stats-card">
+            <h1>🏆 Die 10 besten Spieler</h1>
+            <p style="color: #888; font-size: 0.9em;">Live-Daten aus deiner Supabase-Datenbank</p>
+            
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>Rang</th>
+                        <th>Spieler</th>
+                        <th>Siege</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <tr>
+                        <td colspan="3" style="text-align:center;">Lade Rangliste...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="glass-panel stats-card" style="border-left: 4px solid #3498db;">
+            <span>🐍 <strong>Labor-Analyse-Status</strong></span>
+            <div style="margin-top: 10px; font-size: 0.9em;">
+                <div>Engine-Typ: <span style="color: #00ff00;">Rust Core (logic.rs)</span></div>
+                <div>Berechnungstiefe: <span style="color: #f1c40f;">4 Züge</span></div>
+                <div id="go-status" style="margin-top: 5px; font-style: italic; color: #888;">System-Check stabil</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+        
+        // ECHTE DATEN AUS DEINER INDEX.HTML
+        const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
+        const supabaseKey = 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ'
+        const supabase = createClient(supabaseUrl, supabaseKey)
+
+        async function loadStats() {
+            const { data, error } = await supabase
+                .from('players')
+                .select('username, wins')
+                .order('wins', { ascending: false })
+                .limit(10);
+
+            const tbody = document.getElementById('leaderboard-body');
+            if (error) {
+                tbody.innerHTML = "<tr><td colspan='3'>Fehler beim Laden.</td></tr>";
+                return;
+            }
+
+            tbody.innerHTML = data.map((p, i) => `
+                <tr class="${i === 0 ? 'rank-highlight' : ''}">
+                    <td>${i === 0 ? '🥇' : '#' + (i + 1)}</td>
+                    <td>${p.username}</td>
+                    <td>${p.wins || 0} 🏆</td>
+                </tr>
+            `).join('');
+        }
+
+        // Simulierter Go-Core-Ticker wie in deiner index.html
+        setInterval(() => {
+            const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
+            const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
+            const el = document.getElementById('go-status');
+            if(el) el.innerText = randomTask;
+        }, 4000);
+
+        loadStats();
+    </script>
+</body>
+</html>
