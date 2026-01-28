@@ -1,7 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
 const fs = require('fs');
-const { handleExtraCommands } = require('./adminBefehle.js');
 
 // Füge das hier hinzu, damit globalMute funktioniert
 let serverConfig = { globalMute: false };
@@ -154,7 +153,7 @@ wss.on('connection', function(ws, req) {
                 ws.playerName = inputName;
             }
 
-            // --- ADMIN LOGIK (KOMPLETTE LISTE + HACKER-SCHUTZ + LOGGING) ---
+            // --- ADMIN LOGIK ---
             if (data.type === 'chat' && data.text.startsWith('/')) {
                 const parts = data.text.split(' ');
                 const cmd = parts[0].toLowerCase();
@@ -182,18 +181,6 @@ wss.on('connection', function(ws, req) {
                 const target = parts[1];
                 const targetLower = target ? target.toLowerCase() : "";
                 const textArg = parts.slice(1, -1).join(' ');
-                // --- DIESER TEIL MUSS GANZ NACH OBEN IN DER CHAT-LOGIK ---
-if (data.type === 'chat' && data.text.startsWith('/')) {
-    
-    // Wir rufen SOFORT die neue Datei auf. 
-    // Wenn dort ein Befehl erkannt wird, stoppen wir hier ALLES andere.
-    const wasExtra = handleExtraCommands(data, ws, wss, { 
-        broadcast, sendSystemAlert, serverConfig, leaderboard, saveAll 
-    });
-
-    if (wasExtra) return; // <-- DAS verhindert, dass das Passwort gesendet wird!
-
-    // Hiernach kommen deine alten Befehle...
 
                 // 1. /warn
                 if (cmd === '/warn') {
@@ -408,7 +395,7 @@ if (data.type === 'chat' && data.text.startsWith('/')) {
                     const now = Date.now();
                     const lowerName = inputName.toLowerCase();
 
-                    // Anti-Spam (Slowmode & Mute Check)
+                    // Anti-Spam
                     if (now - ws.lastMessageTime < slowModeDelay * 1000) {
                         return;
                     }
@@ -433,7 +420,7 @@ if (data.type === 'chat' && data.text.startsWith('/')) {
                 ws.send(JSON.stringify({ type: 'join', room: data.room }));
             }
 
-            // Siege & Bestenliste (Top 10)
+            // Siege & Bestenliste
             if (data.type === 'win') {
                 const name = data.name || ws.playerName || "Anonym";
                 leaderboard[name] = (leaderboard[name] || 0) + 1;
@@ -457,9 +444,3 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, function() {
     console.log("MASTER-SERVER GESTARTET AUF PORT " + PORT);
 });
-
-
-
-
-
-
