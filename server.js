@@ -3,6 +3,9 @@ const http = require('http');
 const fs = require('fs');
 const { handleExtraCommands } = require('./adminBefehle.js');
 
+// Füge das hier hinzu, damit globalMute funktioniert
+let serverConfig = { globalMute: false };
+
 // --- SERVER SETUP ---
 const server = http.createServer((req, res) => { 
     res.writeHead(200); 
@@ -442,6 +445,7 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, function() {
     console.log("MASTER-SERVER GESTARTET AUF PORT " + PORT);
 });
+
 
 
 
