@@ -113,6 +113,34 @@ async function saveMessage(username, text) {
         .insert([{ username: username, content: text }]);
     
     if (error) console.error("Chat-Fehler:", error.message);
+    async function loadChatHistory() {
+    const { data, error } = await window.supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(30);
+
+    if (error) {
+        console.error("Fehler beim Laden:", error.message);
+        return;
+    }
+
+    if (data) {
+        data.forEach(m => {
+            // FIX: Zeigt "Gast" an, wenn in der DB "EMPTY" steht
+            const displayName = (m.username && m.username !== "EMPTY") ? m.username : "Gast";
+            
+            // Prüft, ob es deine eigene Nachricht ist
+            const role = (m.username === getMyName()) ? "me" : "other";
+            
+            // Schreibt die Nachricht in dein Chat-Fenster
+            addChat(displayName, m.content, role);
+        });
+    }
+}
+
+// Diesen Befehl aufrufen, damit die Nachrichten sofort laden
+loadChatHistory();
 }
 async function loadChatHistory() {
     const { data, error } = await window.supabase
@@ -437,4 +465,5 @@ async function saveWinToSupabase(name) {
 }
 
 resetGame();
+
 
