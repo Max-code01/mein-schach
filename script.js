@@ -128,20 +128,15 @@ async function saveMessage(username, text) {
     if (data) {
         data.forEach(m => {
             // FIX: Zeigt "Gast" an, wenn in der DB "EMPTY" steht
-            const displayName = (m.username && m.username !== "EMPTY") ? m.username : "Gast";
+            
             
             // Prüft, ob es deine eigene Nachricht ist
-            const role = (m.username ===
+           
             
             // Schreibt die Nachricht in de// Diesen Befehl aufrufen, damit die Nachrichten sofort laden
 
 
-async function loadChatHistory() {
-    const { data, error } = await window.supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: false})
-        .limit(30);
+
 
 
 const saveBtn = document.getElementById("saveAccountBtn");
@@ -443,6 +438,7 @@ async function saveWinToSupabase(name) {
 }
 
 resetGame();
+
 
 
 
