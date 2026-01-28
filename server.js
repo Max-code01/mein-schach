@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 const fs = require('fs');
+const { handleExtraCommands } = require('./adminBefehle.js');
 
 // --- SERVER SETUP ---
 const server = http.createServer((req, res) => { 
@@ -441,6 +442,7 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, function() {
     console.log("MASTER-SERVER GESTARTET AUF PORT " + PORT);
 });
+
 
 
 
