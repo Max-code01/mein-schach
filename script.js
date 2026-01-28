@@ -140,8 +140,8 @@ async function saveMessage(username, text) {
 }
 
 // Diesen Befehl aufrufen, damit die Nachrichten sofort laden
-loadChatHistory();
-}
+
+
 async function loadChatHistory() {
     const { data, error } = await window.supabase
         .from('messages')
@@ -163,8 +163,6 @@ async function loadChatHistory() {
     }
 }
 
-// Diesen Befehl ganz am Ende aufrufen, damit die Nachrichten sofort laden
-loadChatHistory();
 
 const saveBtn = document.getElementById("saveAccountBtn");
 if (saveBtn) {
@@ -465,5 +463,6 @@ async function saveWinToSupabase(name) {
 }
 
 resetGame();
+
 
 
