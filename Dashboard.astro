@@ -1,0 +1,82 @@
+---
+// Astro "Frontmatter" - Hier wird Logik definiert (2026 Standard)
+const title = "Schach Analyse Dashboard";
+const stats = {
+  player: "Max",
+  wins: 26,
+  elo: 1550,
+  aggression: "Hoch (Angriffslustig)",
+  accuracy: "78%"
+};
+
+const modules = [
+  { name: "Rust Core", status: "Aktiv", file: "logic.rs" },
+  { name: "Python Lab", status: "Bereit", file: "stats_manager.py" },
+  { name: "Go Backend", status: "Online", file: "stats.go" }
+];
+---
+
+<div class="astro-dashboard">
+  <header>
+    <h1>{title}</h1>
+    <p>Modernes Framework Frontend</p>
+  </header>
+
+  <section class="grid">
+    <div class="card">
+      <h3>👤 Spieler: {stats.player}</h3>
+      <div class="stat-line">Siege: <span>{stats.wins} 🏆</span></div>
+      <div class="stat-line">Elo: <span>{stats.elo} 🔥</span></div>
+    </div>
+
+    <div class="card highlight">
+      <h3>🐍 KI-Labor Werte</h3>
+      <p>Aggressivität: {stats.aggression}</p>
+      <p>Genauigkeit: {stats.accuracy}</p>
+    </div>
+  </section>
+
+  <section class="tech-stack">
+    <h3>Verbundene System-Kerne</h3>
+    <div class="chips">
+      {modules.map((m) => (
+        <span class="chip">
+          <strong>{m.name}:</strong> {m.status} ({m.file})
+        </span>
+      ))}
+    </div>
+  </section>
+</div>
+
+<style>
+  /* Astro Styles sind "scoped" - sie stören deine style.css NICHT! */
+  .astro-dashboard {
+    font-family: 'Segoe UI', sans-serif;
+    color: white;
+    background: #1a1a1a;
+    padding: 2rem;
+    border-radius: 15px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 20px 0;
+  }
+  .card {
+    background: rgba(255,255,255,0.05);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px dashed #444;
+  }
+  .highlight { border: 1px solid #3498db; }
+  .stat-line span { color: #f1c40f; font-weight: bold; }
+  .chip {
+    display: inline-block;
+    background: #333;
+    padding: 5px 12px;
+    border-radius: 20px;
+    margin-right: 10px;
+    font-size: 0.8em;
+  }
+</style>
