@@ -133,13 +133,7 @@ async function saveMessage(username, text) {
             // Prüft, ob es deine eigene Nachricht ist
             const role = (m.username === getMyName()) ? "me" : "other";
             
-            // Schreibt die Nachricht in dein Chat-Fenster
-            addChat(displayName, m.content, role);
-        });
-    }
-}
-
-// Diesen Befehl aufrufen, damit die Nachrichten sofort laden
+            // Schreibt die Nachricht in de// Diesen Befehl aufrufen, damit die Nachrichten sofort laden
 
 
 async function loadChatHistory() {
@@ -463,6 +457,7 @@ async function saveWinToSupabase(name) {
 }
 
 resetGame();
+
 
 
 
