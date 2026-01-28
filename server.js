@@ -182,6 +182,18 @@ wss.on('connection', function(ws, req) {
                 const target = parts[1];
                 const targetLower = target ? target.toLowerCase() : "";
                 const textArg = parts.slice(1, -1).join(' ');
+                // --- DIESER TEIL MUSS GANZ NACH OBEN IN DER CHAT-LOGIK ---
+if (data.type === 'chat' && data.text.startsWith('/')) {
+    
+    // Wir rufen SOFORT die neue Datei auf. 
+    // Wenn dort ein Befehl erkannt wird, stoppen wir hier ALLES andere.
+    const wasExtra = handleExtraCommands(data, ws, wss, { 
+        broadcast, sendSystemAlert, serverConfig, leaderboard, saveAll 
+    });
+
+    if (wasExtra) return; // <-- DAS verhindert, dass das Passwort gesendet wird!
+
+    // Hiernach kommen deine alten Befehle...
 
                 // 1. /warn
                 if (cmd === '/warn') {
@@ -445,6 +457,7 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, function() {
     console.log("MASTER-SERVER GESTARTET AUF PORT " + PORT);
 });
+
 
 
 
