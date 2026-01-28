@@ -27,7 +27,7 @@ let slowModeDelay = 0;
 let messageHistory = new Map(); 
 let lastSentMessage = new Map(); 
 
-const adminPass = "Admin111";
+const adminPass = "Admina111";
 
 // --- NEU: HILFSFUNKTION FÜR DAS LEADERBOARD (Top 10) ---
 function sendLeaderboardUpdate(target) {
@@ -441,5 +441,6 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, function() {
     console.log("MASTER-SERVER GESTARTET AUF PORT " + PORT);
 });
+
 
 
