@@ -99,12 +99,44 @@ function sendMsg() {
             password: getMyPass(), 
             room: onlineRoom 
         }));
+        saveMessage(name, t);
         addChat("Ich", t, "me"); 
         chatInput.value = "";
     }
 }
 document.getElementById("send-chat").onclick = sendMsg;
 chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
+// Diese Funktion speichert die Nachricht in Supabase
+async function saveMessage(username, text) {
+    const { error } = await window.supabase
+        .from('messages')
+        .insert([{ username: username, content: text }]);
+    
+    if (error) console.error("Chat-Fehler:", error.message);
+}
+async function loadChatHistory() {
+    const { data, error } = await window.supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(30);
+
+    if (error) {
+        console.error("Fehler beim Laden:", error.message);
+        return;
+    }
+
+    if (data) {
+        data.forEach(m => {
+            // Prüft, ob die Nachricht von dir ("me") oder anderen ("other") ist
+            const role = (m.username === getMyName()) ? "me" : "other";
+            addChat(m.username, m.content, role);
+        });
+    }
+}
+
+// Diesen Befehl ganz am Ende aufrufen, damit die Nachrichten sofort laden
+loadChatHistory();
 
 const saveBtn = document.getElementById("saveAccountBtn");
 if (saveBtn) {
@@ -405,3 +437,4 @@ async function saveWinToSupabase(name) {
 }
 
 resetGame();
+
